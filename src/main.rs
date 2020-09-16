@@ -1,3 +1,13 @@
+mod driver;
+mod error;
+mod lexer;
+mod parser;
+mod token;
+
 fn main() {
-    println!("Hello, world!");
+    let file = std::env::args()
+        .nth(1)
+        .expect("Usage: minidecaf <source file>");
+    let input = std::fs::read(file).unwrap();
+    driver::run(input.as_slice(), &mut std::io::stdout());
 }
