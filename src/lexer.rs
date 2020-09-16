@@ -1,6 +1,14 @@
 use crate::error::*;
 use crate::token::*;
 
+fn recognize_keyword<'a>(input: &'a [u8]) -> TokenKind {
+    match input {
+        b"int" => TokenKind::Int,
+        b"return" => TokenKind::Return,
+        _ => TokenKind::Identifier(input),
+    }
+}
+
 pub fn get_token<'a, 'b>(input: &'a [u8], mut row: u32, mut col: u32) -> LexicalResult<'a, 'b> {
     let mut offset = 0usize;
     while offset < input.len() {
@@ -61,7 +69,7 @@ pub fn get_token<'a, 'b>(input: &'a [u8], mut row: u32, mut col: u32) -> Lexical
                         break LexicalResult::Ok((
                             remaining,
                             Token {
-                                kind: TokenKind::Identifier(token),
+                                kind: recognize_keyword(token),
                                 row,
                                 col,
                             },
