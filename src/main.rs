@@ -1,5 +1,7 @@
+mod ast;
 mod driver;
 mod error;
+mod generator;
 mod lexer;
 mod parser;
 mod token;

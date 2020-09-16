@@ -1,8 +1,8 @@
-#[derive(Debug)]
-pub enum TokenKind<'a> {
+#[derive(Debug, PartialEq)]
+pub enum TokenKind {
     // Special
-    Integer(&'a [u8]),
-    Identifier(&'a [u8]),
+    Integer,
+    Identifier,
     Eof,
     // Symbols
     LeftParenthesis,
@@ -17,7 +17,8 @@ pub enum TokenKind<'a> {
 
 #[derive(Debug)]
 pub struct Token<'a> {
-    pub kind: TokenKind<'a>,
-    pub row: u32,
-    pub col: u32,
+    pub kind: TokenKind,
+    pub slice: &'a [u8], // token from the source code (as byte slice)
+    pub row: usize,      // beginning position of this token
+    pub col: usize,      // ending position of this token
 }
