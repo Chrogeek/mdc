@@ -149,7 +149,15 @@ impl<'a> Lexer<'a> {
                 b'~' => make_single_symbol_match_arm!(Not),
                 b'!' => make_single_symbol_match_arm!(LogicalNot),
                 b'-' => make_single_symbol_match_arm!(Hyphen),
-                _ => Err(format!("Unknown symbol '{}'", self.source[0]).to_string()),
+                b'+' => make_single_symbol_match_arm!(Plus),
+                b'*' => make_single_symbol_match_arm!(Asterisk),
+                b'/' => make_single_symbol_match_arm!(Slash),
+                b'%' => make_single_symbol_match_arm!(Percentage),
+                _ => Err(format!(
+                    "Line {}, column {}: Unknown symbol '{}'",
+                    self.row, self.col, self.source[0]
+                )
+                .to_string()),
             }
         }
     }

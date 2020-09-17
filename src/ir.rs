@@ -9,6 +9,11 @@ pub enum Instruction {
     Negate,
     Not,
     LogicalNot,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
 }
 
 pub struct Context {
@@ -59,6 +64,31 @@ impl Context {
             Expression::LogicalNot(rhs) => {
                 self.visit_expression(rhs);
                 self.ir.push(Instruction::LogicalNot);
+            }
+            Expression::Addition(lhs, rhs) => {
+                self.visit_expression(lhs);
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::Add);
+            }
+            Expression::Subtraction(lhs, rhs) => {
+                self.visit_expression(lhs);
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::Subtract);
+            }
+            Expression::Multiplication(lhs, rhs) => {
+                self.visit_expression(lhs);
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::Multiply);
+            }
+            Expression::Division(lhs, rhs) => {
+                self.visit_expression(lhs);
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::Divide);
+            }
+            Expression::Modulus(lhs, rhs) => {
+                self.visit_expression(lhs);
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::Modulo);
             }
         }
     }

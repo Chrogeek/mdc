@@ -44,10 +44,9 @@ pub enum Expression {
     Negation(Box<Expression>),
     Not(Box<Expression>),
     LogicalNot(Box<Expression>),
+    Addition(Box<Expression>, Box<Expression>),
+    Subtraction(Box<Expression>, Box<Expression>),
+    Multiplication(Box<Expression>, Box<Expression>),
+    Division(Box<Expression>, Box<Expression>),
+    Modulus(Box<Expression>, Box<Expression>),
 }
-
-// impl Expression {
-//     pub fn accept(&self, visitor: &mut Context) {
-//         visitor.visit_expression(self);
-//     }
-// }

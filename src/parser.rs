@@ -19,6 +19,8 @@ impl<'a> Parser<'a> {
         Program { function }
     }
 
+    // fn parse_type(&mut self) {} // Reserved interface
+
     fn parse_function(&mut self) -> Function {
         self.expect_token(TokenKind::Int);
         let name =
@@ -42,18 +44,61 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self) -> Expression {
+        self.parse_additive()
+    }
+
+    fn parse_additive(&mut self) -> Expression {
+        let mut expr = self.parse_multiplicative();
+        loop {
+            if let Some(_) = self.accept_token(TokenKind::Plus) {
+                expr = Expression::Addition(Box::new(expr), Box::new(self.parse_multiplicative()));
+            } else if let Some(_) = self.accept_token(TokenKind::Hyphen) {
+                expr =
+                    Expression::Subtraction(Box::new(expr), Box::new(self.parse_multiplicative()));
+            } else {
+                break expr;
+            }
+        }
+    }
+
+    fn parse_multiplicative(&mut self) -> Expression {
+        let mut expr = self.parse_unary();
+        loop {
+            if let Some(_) = self.accept_token(TokenKind::Asterisk) {
+                expr = Expression::Multiplication(Box::new(expr), Box::new(self.parse_unary()));
+            } else if let Some(_) = self.accept_token(TokenKind::Slash) {
+                expr = Expression::Division(Box::new(expr), Box::new(self.parse_unary()));
+            } else if let Some(_) = self.accept_token(TokenKind::Percentage) {
+                expr = Expression::Modulus(Box::new(expr), Box::new(self.parse_unary()));
+            } else {
+                break expr;
+            }
+        }
+    }
+
+    fn parse_unary(&mut self) -> Expression {
         if let Some(_) = self.accept_token(TokenKind::Hyphen) {
-            Expression::Negation(Box::new(self.parse_expression()))
+            Expression::Negation(Box::new(self.parse_unary()))
         } else if let Some(_) = self.accept_token(TokenKind::Not) {
-            Expression::Not(Box::new(self.parse_expression()))
+            Expression::Not(Box::new(self.parse_unary()))
         } else if let Some(_) = self.accept_token(TokenKind::LogicalNot) {
-            Expression::LogicalNot(Box::new(self.parse_expression()))
+            Expression::LogicalNot(Box::new(self.parse_unary()))
+        } else {
+            self.parse_primary()
+        }
+    }
+
+    fn parse_primary(&mut self) -> Expression {
+        if let Some(_) = self.accept_token(TokenKind::LeftParenthesis) {
+            let expression = self.parse_expression();
+            self.expect_token(TokenKind::RightParenthesis);
+            expression
         } else {
             let token = self.expect_token(TokenKind::Integer);
-            let value = String::from_utf8(token.slice.to_vec())
-                .unwrap()
+            let value = String::from_utf8(token.slice.to_vec()).unwrap();
+            let value = value // Should not invoke any error
                 .parse()
-                .unwrap();
+                .expect(&format!("Cannot cast '{}' to an 'int' literal", value));
             Expression::IntegerLiteral(value)
         }
     }

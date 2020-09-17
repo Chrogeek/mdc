@@ -13,6 +13,10 @@ pub enum TokenKind {
     Not,
     LogicalNot,
     Hyphen,
+    Plus,
+    Asterisk,
+    Slash,
+    Percentage,
     // Keywords
     Int,
     Return,
