@@ -49,4 +49,12 @@ pub enum Expression {
     Multiplication(Box<Expression>, Box<Expression>),
     Division(Box<Expression>, Box<Expression>),
     Modulus(Box<Expression>, Box<Expression>),
+    Equal(Box<Expression>, Box<Expression>),
+    Unequal(Box<Expression>, Box<Expression>),
+    Less(Box<Expression>, Box<Expression>),
+    LessEqual(Box<Expression>, Box<Expression>),
+    Greater(Box<Expression>, Box<Expression>),
+    GreaterEqual(Box<Expression>, Box<Expression>),
+    LogicalAnd(Box<Expression>, Box<Expression>),
+    LogicalOr(Box<Expression>, Box<Expression>),
 }

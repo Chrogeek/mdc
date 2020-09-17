@@ -51,8 +51,34 @@ impl<'a> Lexer<'a> {
                     kind: TokenKind::$target,
                     slice: token,
                     row: self.row,
-                    col: self.col,
+                    col: self.col - 1,
                 })
+            }};
+        }
+
+        macro_rules! make_double_symbol_match_arm {
+            ($second: expr, $target1: ident, $target2: ident) => {{
+                if self.source.len() < 2 || self.source[1] != $second {
+                    self.col += 1;
+                    let (token, remaining) = self.source.split_at(1);
+                    self.source = remaining;
+                    Ok(Token {
+                        kind: TokenKind::$target1,
+                        slice: token,
+                        row: self.row,
+                        col: self.col - 1,
+                    })
+                } else {
+                    self.col += 2;
+                    let (token, remaining) = self.source.split_at(2);
+                    self.source = remaining;
+                    Ok(Token {
+                        kind: TokenKind::$target2,
+                        slice: token,
+                        row: self.row,
+                        col: self.col - 2,
+                    })
+                }
             }};
         }
 
@@ -93,7 +119,7 @@ impl<'a> Lexer<'a> {
                             kind: TokenKind::Integer,
                             slice: token,
                             row: self.row,
-                            col: self.col,
+                            col: self.col - offset,
                         });
                     }
                     match self.source[offset] {
@@ -106,7 +132,7 @@ impl<'a> Lexer<'a> {
                                 kind: TokenKind::Integer,
                                 slice: token,
                                 row: self.row,
-                                col: self.col,
+                                col: self.col - offset,
                             });
                         }
                     }
@@ -121,7 +147,7 @@ impl<'a> Lexer<'a> {
                             kind: Self::recognize_keyword(self.source),
                             slice: token,
                             row: self.row,
-                            col: self.col,
+                            col: self.col - offset,
                         });
                     }
                     match self.source[offset] {
@@ -136,7 +162,7 @@ impl<'a> Lexer<'a> {
                                 kind: Self::recognize_keyword(token),
                                 slice: token,
                                 row: self.row,
-                                col: self.col,
+                                col: self.col - offset,
                             });
                         }
                     }
@@ -147,12 +173,17 @@ impl<'a> Lexer<'a> {
                 b'{' => make_single_symbol_match_arm!(LeftBrace),
                 b'}' => make_single_symbol_match_arm!(RightBrace),
                 b'~' => make_single_symbol_match_arm!(Not),
-                b'!' => make_single_symbol_match_arm!(LogicalNot),
+                b'!' => make_double_symbol_match_arm!(b'=', LogicalNot, Unequal),
                 b'-' => make_single_symbol_match_arm!(Hyphen),
                 b'+' => make_single_symbol_match_arm!(Plus),
                 b'*' => make_single_symbol_match_arm!(Asterisk),
                 b'/' => make_single_symbol_match_arm!(Slash),
                 b'%' => make_single_symbol_match_arm!(Percentage),
+                b'=' => make_double_symbol_match_arm!(b'=', Assign, Equal),
+                b'<' => make_double_symbol_match_arm!(b'=', Less, LessEqual),
+                b'>' => make_double_symbol_match_arm!(b'=', Greater, GreaterEqual),
+                b'&' => make_double_symbol_match_arm!(b'&', And, LogicalAnd),
+                b'|' => make_double_symbol_match_arm!(b'|', Or, LogicalOr),
                 _ => Err(format!(
                     "Line {}, column {}: Unknown symbol '{}'",
                     self.row, self.col, self.source[0]

@@ -14,6 +14,14 @@ pub enum Instruction {
     Multiply,
     Divide,
     Modulo,
+    Equal,
+    Unequal,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    LogicalAnd,
+    LogicalOr,
 }
 
 pub struct Context {
@@ -51,6 +59,14 @@ impl Context {
     }
 
     pub fn visit_expression(&mut self, expression: &Expression) {
+        macro_rules! make_binary_operator_visitor {
+            ($lhs: ident, $rhs: ident, $instruction: ident) => {{
+                self.visit_expression($lhs);
+                self.visit_expression($rhs);
+                self.ir.push(Instruction::$instruction);
+            }};
+        }
+
         match expression {
             Expression::IntegerLiteral(value) => self.ir.push(Instruction::Push(*value)),
             Expression::Negation(rhs) => {
@@ -65,31 +81,23 @@ impl Context {
                 self.visit_expression(rhs);
                 self.ir.push(Instruction::LogicalNot);
             }
-            Expression::Addition(lhs, rhs) => {
-                self.visit_expression(lhs);
-                self.visit_expression(rhs);
-                self.ir.push(Instruction::Add);
-            }
-            Expression::Subtraction(lhs, rhs) => {
-                self.visit_expression(lhs);
-                self.visit_expression(rhs);
-                self.ir.push(Instruction::Subtract);
-            }
+            Expression::Addition(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Add),
+            Expression::Subtraction(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Subtract),
             Expression::Multiplication(lhs, rhs) => {
-                self.visit_expression(lhs);
-                self.visit_expression(rhs);
-                self.ir.push(Instruction::Multiply);
+                make_binary_operator_visitor!(lhs, rhs, Multiply)
             }
-            Expression::Division(lhs, rhs) => {
-                self.visit_expression(lhs);
-                self.visit_expression(rhs);
-                self.ir.push(Instruction::Divide);
+            Expression::Division(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Divide),
+            Expression::Modulus(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Modulo),
+            Expression::Equal(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Equal),
+            Expression::Unequal(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Unequal),
+            Expression::Less(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Less),
+            Expression::LessEqual(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, LessEqual),
+            Expression::Greater(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, Greater),
+            Expression::GreaterEqual(lhs, rhs) => {
+                make_binary_operator_visitor!(lhs, rhs, GreaterEqual)
             }
-            Expression::Modulus(lhs, rhs) => {
-                self.visit_expression(lhs);
-                self.visit_expression(rhs);
-                self.ir.push(Instruction::Modulo);
-            }
+            Expression::LogicalAnd(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, LogicalAnd),
+            Expression::LogicalOr(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, LogicalOr),
         }
     }
 

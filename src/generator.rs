@@ -5,69 +5,55 @@ pub fn generate_instruction(
     ir: &Instruction,
     output: &mut impl Write,
 ) -> Result<(), std::io::Error> {
+    macro_rules! write_instructions {
+        ($($instruction: expr),+) => {{
+            $(writeln!(output, $instruction)?;)+
+        }}
+    }
+
+    macro_rules! write_binary_operator_instructions {
+        ($($instruction: expr),+) => {
+            write_instructions!("lw t1, 4(sp)", "lw t2, 0(sp)", $($instruction),+, "sw t1, 4(sp)", "addi sp, sp, 4");
+        }
+    }
+
     match ir {
         Instruction::Directive(text) => {
             writeln!(output, "{}", text)?;
         }
         Instruction::Push(value) => {
-            writeln!(output, "addi sp, sp, -4")?;
+            write_instructions!("addi sp, sp, -4");
             writeln!(output, "li t1, {}", value)?;
-            writeln!(output, "sw t1, 0(sp)")?;
+            write_instructions!("sw t1, 0(sp)");
         }
-        Instruction::Return => {
-            writeln!(output, "lw a0, 0(sp)")?;
-            writeln!(output, "addi sp, sp, 4")?;
-            writeln!(output, "jr ra")?;
-        }
-        Instruction::Negate => {
-            writeln!(output, "lw t1, 0(sp)")?;
-            writeln!(output, "neg t1, t1")?;
-            writeln!(output, "sw t1, 0(sp)")?;
-        }
-        Instruction::Not => {
-            writeln!(output, "lw t1, 0(sp)")?;
-            writeln!(output, "not t1, t1")?;
-            writeln!(output, "sw t1, 0(sp)")?;
-        }
+        Instruction::Return => write_instructions!("lw a0, 0(sp)", "addi sp, sp, 4", "jr ra"),
+        Instruction::Negate => write_instructions!("lw t1, 0(sp)", "neg t1, t1", "sw t1, 0(sp)"),
+        Instruction::Not => write_instructions!("lw t1, 0(sp)", "not t1, t1", "sw t1, 0(sp)"),
         Instruction::LogicalNot => {
-            writeln!(output, "lw t1, 0(sp)")?;
-            writeln!(output, "seqz t1, t1")?;
-            writeln!(output, "sw t1, 0(sp)")?;
+            write_instructions!("lw t1, 0(sp)", "seqz t1, t1", "sw t1, 0(sp)")
         }
-        Instruction::Add => {
-            writeln!(output, "lw t1, 4(sp)")?;
-            writeln!(output, "lw t2, 0(sp)")?;
-            writeln!(output, "add t1, t1, t2")?;
-            writeln!(output, "sw t1, 4(sp)")?;
-            writeln!(output, "addi sp, sp, 4")?;
+        Instruction::Add => write_binary_operator_instructions!("add t1, t1, t2"),
+        Instruction::Subtract => write_binary_operator_instructions!("sub t1, t1, t2"),
+        Instruction::Multiply => write_binary_operator_instructions!("mul t1, t1, t2"),
+        Instruction::Divide => write_binary_operator_instructions!("div t1, t1, t2"),
+        Instruction::Modulo => write_binary_operator_instructions!("rem t1, t1, t2"),
+        Instruction::Equal => write_binary_operator_instructions!("sub t1, t1, t2", "seqz t1, t1"),
+        Instruction::Unequal => {
+            write_binary_operator_instructions!("sub t1, t1, t2", "snez t1, t1")
         }
-        Instruction::Subtract => {
-            writeln!(output, "lw t1, 4(sp)")?;
-            writeln!(output, "lw t2, 0(sp)")?;
-            writeln!(output, "sub t1, t1, t2")?;
-            writeln!(output, "sw t1, 4(sp)")?;
-            writeln!(output, "addi sp, sp, 4")?;
+        Instruction::Less => write_binary_operator_instructions!("slt t1, t1, t2"),
+        Instruction::LessEqual => {
+            write_binary_operator_instructions!("slt t1, t2, t1", "seqz t1, t1")
         }
-        Instruction::Multiply => {
-            writeln!(output, "lw t1, 4(sp)")?;
-            writeln!(output, "lw t2, 0(sp)")?;
-            writeln!(output, "mul t1, t1, t2")?;
-            writeln!(output, "sw t1, 4(sp)")?;
-            writeln!(output, "addi sp, sp, 4")?;
+        Instruction::Greater => write_binary_operator_instructions!("slt t1, t2, t1"),
+        Instruction::GreaterEqual => {
+            write_binary_operator_instructions!("slt t1, t1, t2", "seqz t1, t1")
         }
-        Instruction::Divide => {
-            writeln!(output, "lw t1, 4(sp)")?;
-            writeln!(output, "lw t2, 0(sp)")?;
-            writeln!(output, "div t1, t1, t2")?;
-            writeln!(output, "sw t1, 4(sp)")?;
-            writeln!(output, "addi sp, sp, 4")?;
+        Instruction::LogicalAnd => {
+            write_binary_operator_instructions!("snez t1, t1", "snez t2, t2", "and t1, t1, t2")
         }
-        Instruction::Modulo => {
-            writeln!(output, "lw t1, 4(sp)")?;
-            writeln!(output, "lw t2, 0(sp)")?;
-            writeln!(output, "rem t1, t1, t2")?;
-            writeln!(output, "sw t1, 4(sp)")?;
-            writeln!(output, "addi sp, sp, 4")?;
+        Instruction::LogicalOr => {
+            write_binary_operator_instructions!("or t1, t1, t2", "snez t1, t1")
         }
     };
     Ok(())

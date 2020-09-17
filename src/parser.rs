@@ -44,7 +44,59 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self) -> Expression {
-        self.parse_additive()
+        self.parse_logical_or()
+    }
+
+    fn parse_logical_or(&mut self) -> Expression {
+        let mut expr = self.parse_logical_and();
+        loop {
+            if let Some(_) = self.accept_token(TokenKind::LogicalOr) {
+                expr = Expression::LogicalOr(Box::new(expr), Box::new(self.parse_logical_and()));
+            } else {
+                break expr;
+            }
+        }
+    }
+
+    fn parse_logical_and(&mut self) -> Expression {
+        let mut expr = self.parse_equality();
+        loop {
+            if let Some(_) = self.accept_token(TokenKind::LogicalAnd) {
+                expr = Expression::LogicalAnd(Box::new(expr), Box::new(self.parse_equality()));
+            } else {
+                break expr;
+            }
+        }
+    }
+
+    fn parse_equality(&mut self) -> Expression {
+        let mut expr = self.parse_relational();
+        loop {
+            if let Some(_) = self.accept_token(TokenKind::Equal) {
+                expr = Expression::Equal(Box::new(expr), Box::new(self.parse_relational()));
+            } else if let Some(_) = self.accept_token(TokenKind::Unequal) {
+                expr = Expression::Unequal(Box::new(expr), Box::new(self.parse_relational()));
+            } else {
+                break expr;
+            }
+        }
+    }
+
+    fn parse_relational(&mut self) -> Expression {
+        let mut expr = self.parse_additive();
+        loop {
+            if let Some(_) = self.accept_token(TokenKind::Less) {
+                expr = Expression::Less(Box::new(expr), Box::new(self.parse_additive()));
+            } else if let Some(_) = self.accept_token(TokenKind::LessEqual) {
+                expr = Expression::LessEqual(Box::new(expr), Box::new(self.parse_additive()));
+            } else if let Some(_) = self.accept_token(TokenKind::Greater) {
+                expr = Expression::Greater(Box::new(expr), Box::new(self.parse_additive()));
+            } else if let Some(_) = self.accept_token(TokenKind::GreaterEqual) {
+                expr = Expression::GreaterEqual(Box::new(expr), Box::new(self.parse_additive()));
+            } else {
+                break expr;
+            }
+        }
     }
 
     fn parse_additive(&mut self) -> Expression {

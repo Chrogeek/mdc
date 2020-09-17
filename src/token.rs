@@ -17,6 +17,17 @@ pub enum TokenKind {
     Asterisk,
     Slash,
     Percentage,
+    Equal,
+    Unequal,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Assign,
+    And, // Neither bitwise-and nor bitwise-or operation exists,
+    Or,  // but we reserve them here for convenience
+    LogicalAnd,
+    LogicalOr,
     // Keywords
     Int,
     Return,
