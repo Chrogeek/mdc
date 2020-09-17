@@ -10,6 +10,9 @@ pub enum TokenKind {
     LeftBrace,
     RightBrace,
     Semicolon,
+    Not,
+    LogicalNot,
+    Hyphen,
     // Keywords
     Int,
     Return,

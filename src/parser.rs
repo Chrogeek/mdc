@@ -42,12 +42,20 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self) -> Expression {
-        let token = self.expect_token(TokenKind::Integer);
-        let value = String::from_utf8(token.slice.to_vec())
-            .unwrap()
-            .parse()
-            .unwrap();
-        Expression::IntegerLiteral(value)
+        if let Some(_) = self.accept_token(TokenKind::Hyphen) {
+            Expression::Negation(Box::new(self.parse_expression()))
+        } else if let Some(_) = self.accept_token(TokenKind::Not) {
+            Expression::Not(Box::new(self.parse_expression()))
+        } else if let Some(_) = self.accept_token(TokenKind::LogicalNot) {
+            Expression::LogicalNot(Box::new(self.parse_expression()))
+        } else {
+            let token = self.expect_token(TokenKind::Integer);
+            let value = String::from_utf8(token.slice.to_vec())
+                .unwrap()
+                .parse()
+                .unwrap();
+            Expression::IntegerLiteral(value)
+        }
     }
 
     fn accept_token(&mut self, kind: TokenKind) -> Option<Token> {

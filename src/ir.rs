@@ -6,6 +6,9 @@ pub enum Instruction {
     Directive(String),
     Push(i32),
     Return,
+    Negate,
+    Not,
+    LogicalNot,
 }
 
 pub struct Context {
@@ -36,22 +39,34 @@ impl Context {
     pub fn visit_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Return(expression) => {
-                let value = expression.accept(self);
-                self.ir.push(Instruction::Push(value));
+                self.visit_expression(expression);
                 self.ir.push(Instruction::Return);
             }
         };
     }
 
-    pub fn visit_expression(&mut self, expression: &Expression) -> i32 {
+    pub fn visit_expression(&mut self, expression: &Expression) {
         match expression {
-            Expression::IntegerLiteral(value) => value.clone(),
+            Expression::IntegerLiteral(value) => self.ir.push(Instruction::Push(*value)),
+            Expression::Negation(rhs) => {
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::Negate);
+            }
+            Expression::Not(rhs) => {
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::Not);
+            }
+            Expression::LogicalNot(rhs) => {
+                self.visit_expression(rhs);
+                self.ir.push(Instruction::LogicalNot);
+            }
         }
     }
 
-    pub fn generate(&self, output: &mut impl Write) {
+    pub fn generate(&self, output: &mut impl Write) -> Result<(), std::io::Error> {
         for instruction in self.ir.iter() {
-            generate_instruction(instruction, output);
+            generate_instruction(instruction, output)?;
         }
+        Ok(())
     }
 }

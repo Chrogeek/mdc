@@ -42,6 +42,20 @@ impl<'a> Lexer<'a> {
     }
 
     fn get_token(&mut self) -> LexicalResult<'a> {
+        macro_rules! make_single_symbol_match_arm {
+            ($target: ident) => {{
+                self.col += 1;
+                let (token, remaining) = self.source.split_at(1);
+                self.source = remaining;
+                Ok(Token {
+                    kind: TokenKind::$target,
+                    slice: token,
+                    row: self.row,
+                    col: self.col,
+                })
+            }};
+        }
+
         let mut offset = 0;
         while offset < self.source.len() {
             match self.source[offset] {
@@ -127,61 +141,14 @@ impl<'a> Lexer<'a> {
                         }
                     }
                 },
-                b';' => {
-                    self.col += 1;
-                    let (token, remaining) = self.source.split_at(1);
-                    self.source = remaining;
-                    Ok(Token {
-                        kind: TokenKind::Semicolon,
-                        slice: token,
-                        row: self.row,
-                        col: self.col,
-                    })
-                }
-                b'(' => {
-                    self.col += 1;
-                    let (token, remaining) = self.source.split_at(1);
-                    self.source = remaining;
-                    Ok(Token {
-                        kind: TokenKind::LeftParenthesis,
-                        slice: token,
-                        row: self.row,
-                        col: self.col,
-                    })
-                }
-                b')' => {
-                    self.col += 1;
-                    let (token, remaining) = self.source.split_at(1);
-                    self.source = remaining;
-                    Ok(Token {
-                        kind: TokenKind::RightParenthesis,
-                        slice: token,
-                        row: self.row,
-                        col: self.col,
-                    })
-                }
-                b'{' => {
-                    self.col += 1;
-                    let (token, remaining) = self.source.split_at(1);
-                    self.source = remaining;
-                    Ok(Token {
-                        kind: TokenKind::LeftBrace,
-                        slice: token,
-                        row: self.row,
-                        col: self.col,
-                    })
-                }
-                b'}' => {
-                    self.col += 1;
-                    let (token, remaining) = self.source.split_at(1);
-                    self.source = remaining;
-                    Ok(Token {
-                        kind: TokenKind::RightBrace,
-                        slice: token,
-                        row: self.row,
-                        col: self.col,
-                    })
-                }
+                b';' => make_single_symbol_match_arm!(Semicolon),
+                b'(' => make_single_symbol_match_arm!(LeftParenthesis),
+                b')' => make_single_symbol_match_arm!(RightParenthesis),
+                b'{' => make_single_symbol_match_arm!(LeftBrace),
+                b'}' => make_single_symbol_match_arm!(RightBrace),
+                b'~' => make_single_symbol_match_arm!(Not),
+                b'!' => make_single_symbol_match_arm!(LogicalNot),
+                b'-' => make_single_symbol_match_arm!(Hyphen),
                 _ => Err(format!("Unknown symbol '{}'", self.source[0]).to_string()),
             }
         }

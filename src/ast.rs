@@ -41,10 +41,13 @@ impl Ast for Statement {
 #[derive(Debug)]
 pub enum Expression {
     IntegerLiteral(i32),
+    Negation(Box<Expression>),
+    Not(Box<Expression>),
+    LogicalNot(Box<Expression>),
 }
 
-impl Expression {
-    pub fn accept(&self, visitor: &mut Context) -> i32 {
-        visitor.visit_expression(self)
-    }
-}
+// impl Expression {
+//     pub fn accept(&self, visitor: &mut Context) {
+//         visitor.visit_expression(self);
+//     }
+// }
