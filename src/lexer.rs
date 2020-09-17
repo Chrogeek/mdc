@@ -30,18 +30,18 @@ impl<'a> Lexer<'a> {
         self.ungot_tokens.push(token);
     }
 
-    pub fn fetch_token<'b>(&mut self) -> LexicalResult<'a, 'b> {
+    pub fn fetch_token(&mut self) -> LexicalResult<'a> {
         let ans = if !self.ungot_tokens.is_empty() {
             let token = self.ungot_tokens.pop().unwrap();
             Ok(token)
         } else {
             self.get_token()
         };
-        eprintln!("{:?}", ans);
+        // eprintln!("{:?}", ans);
         ans
     }
 
-    fn get_token<'b>(&mut self) -> LexicalResult<'a, 'b> {
+    fn get_token(&mut self) -> LexicalResult<'a> {
         let mut offset = 0;
         while offset < self.source.len() {
             match self.source[offset] {
@@ -73,10 +73,11 @@ impl<'a> Lexer<'a> {
                     // Integer literals
                     if offset >= self.source.len() {
                         self.col += offset;
-                        self.source = &self.source[offset..];
+                        let (token, remaining) = self.source.split_at(offset);
+                        self.source = remaining;
                         break Ok(Token {
                             kind: TokenKind::Integer,
-                            slice: self.source,
+                            slice: token,
                             row: self.row,
                             col: self.col,
                         });
@@ -84,9 +85,9 @@ impl<'a> Lexer<'a> {
                     match self.source[offset] {
                         b'0'..=b'9' => offset += 1,
                         _ => {
-                            let token = &self.source[..offset];
                             self.col += offset;
-                            self.source = &self.source[offset..];
+                            let (token, remaining) = self.source.split_at(offset);
+                            self.source = remaining;
                             break Ok(Token {
                                 kind: TokenKind::Integer,
                                 slice: token,
@@ -100,10 +101,11 @@ impl<'a> Lexer<'a> {
                     // Identifiers & keywords
                     if offset >= self.source.len() {
                         self.col += offset;
-                        self.source = &self.source[offset..];
+                        let (token, remaining) = self.source.split_at(offset);
+                        self.source = remaining;
                         break Ok(Token {
                             kind: Self::recognize_keyword(self.source),
-                            slice: self.source,
+                            slice: token,
                             row: self.row,
                             col: self.col,
                         });
@@ -113,9 +115,9 @@ impl<'a> Lexer<'a> {
                             offset += 1;
                         }
                         _ => {
-                            let token = &self.source[..offset];
                             self.col += offset;
-                            self.source = &self.source[offset..];
+                            let (token, remaining) = self.source.split_at(offset);
+                            self.source = remaining;
                             break Ok(Token {
                                 kind: Self::recognize_keyword(token),
                                 slice: token,
@@ -127,55 +129,60 @@ impl<'a> Lexer<'a> {
                 },
                 b';' => {
                     self.col += 1;
-                    self.source = &self.source[1..];
+                    let (token, remaining) = self.source.split_at(1);
+                    self.source = remaining;
                     Ok(Token {
                         kind: TokenKind::Semicolon,
-                        slice: &self.source[0..1],
+                        slice: token,
                         row: self.row,
                         col: self.col,
                     })
                 }
                 b'(' => {
                     self.col += 1;
-                    self.source = &self.source[1..];
+                    let (token, remaining) = self.source.split_at(1);
+                    self.source = remaining;
                     Ok(Token {
                         kind: TokenKind::LeftParenthesis,
-                        slice: &self.source[0..1],
+                        slice: token,
                         row: self.row,
                         col: self.col,
                     })
                 }
                 b')' => {
                     self.col += 1;
-                    self.source = &self.source[1..];
+                    let (token, remaining) = self.source.split_at(1);
+                    self.source = remaining;
                     Ok(Token {
                         kind: TokenKind::RightParenthesis,
-                        slice: &self.source[0..1],
+                        slice: token,
                         row: self.row,
                         col: self.col,
                     })
                 }
                 b'{' => {
                     self.col += 1;
-                    self.source = &self.source[1..];
+                    let (token, remaining) = self.source.split_at(1);
+                    self.source = remaining;
                     Ok(Token {
                         kind: TokenKind::LeftBrace,
-                        slice: &self.source[0..1],
+                        slice: token,
                         row: self.row,
                         col: self.col,
                     })
                 }
                 b'}' => {
                     self.col += 1;
-                    self.source = &self.source[1..];
+                    let (token, remaining) = self.source.split_at(1);
+                    self.source = remaining;
                     Ok(Token {
                         kind: TokenKind::RightBrace,
-                        slice: &self.source[0..1],
+                        slice: token,
                         row: self.row,
                         col: self.col,
                     })
                 }
-                _ => Err((self.source, "Unknown symbol")),
+                _ => Err(format!("Unknown symbol '{}'", self.source[0]).to_string()),
             }
         }
     }

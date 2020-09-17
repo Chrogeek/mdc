@@ -14,9 +14,9 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_program(&mut self) -> Program {
-        Program {
-            function: self.parse_function(),
-        }
+        let function = self.parse_function();
+        self.expect_token(TokenKind::Eof);
+        Program { function }
     }
 
     fn parse_function(&mut self) -> Function {

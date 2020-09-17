@@ -1,4 +1,6 @@
 use crate::token::Token;
 
-// Ok(Token), Err((remaining u8 slice, error message))
-pub type LexicalResult<'a, 'b> = Result<Token<'a>, (&'a [u8], &'b str)>;
+// Ok(Token), Err(error message)
+pub type LexicalResult<'a> = Result<Token<'a>, String>;
+
+// pub type SyntaxResult<'a> = Result<(), &'a str>;
