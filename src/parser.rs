@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::lexer::*;
-use crate::token::*;
+use crate::util::*;
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -19,10 +19,13 @@ impl<'a> Parser<'a> {
         Program { function }
     }
 
-    // fn parse_type(&mut self) {} // Reserved interface
+    fn parse_type(&mut self) -> Type {
+        self.expect_token(TokenKind::Int);
+        Type { level: 1 }
+    }
 
     fn parse_function(&mut self) -> Function {
-        self.expect_token(TokenKind::Int);
+        let r#type = self.parse_type();
         let name =
             String::from_utf8_lossy(self.expect_token(TokenKind::Identifier).slice).to_string();
         self.expect_token(TokenKind::LeftParenthesis);
@@ -30,7 +33,7 @@ impl<'a> Parser<'a> {
         self.expect_token(TokenKind::LeftBrace);
         let body = self.parse_statement();
         self.expect_token(TokenKind::RightBrace);
-        Function { name, body }
+        Function { r#type, name, body }
     }
 
     fn parse_statement(&mut self) -> Statement {

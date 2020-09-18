@@ -1,4 +1,4 @@
-use crate::token::*;
+use crate::util::*;
 
 pub struct Lexer<'a> {
     source: &'a [u8],

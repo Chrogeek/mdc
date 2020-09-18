@@ -4,7 +4,7 @@ mod generator;
 mod ir;
 mod lexer;
 mod parser;
-mod token;
+mod util;
 
 fn main() -> Result<(), std::io::Error> {
     let file = std::env::args()

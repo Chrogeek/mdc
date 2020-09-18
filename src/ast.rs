@@ -1,5 +1,6 @@
 use crate::ir::Context;
 use crate::ir::Instruction;
+use crate::util::Type;
 
 pub trait Ast {
     fn emit(&self, context: &mut Context);
@@ -22,6 +23,7 @@ impl Ast for Program {
 
 #[derive(Debug)]
 pub struct Function {
+    pub r#type: Type,
     pub name: String,
     pub body: Statement,
 }

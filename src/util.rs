@@ -40,3 +40,14 @@ pub struct Token<'a> {
     pub row: usize,      // beginning position of this token
     pub col: usize,      // ending position of this token
 }
+
+#[derive(Debug, Clone)]
+pub struct Type {
+    pub level: usize, // Level of pointers (e.g. 3 for 'int ***')
+}
+
+impl Type {
+    pub fn measure(&self) -> usize {
+        self.level * 4
+    }
+}
