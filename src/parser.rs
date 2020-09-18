@@ -156,7 +156,7 @@ impl<'a> Parser<'a> {
     }
 
     fn accept_token(&mut self, kind: TokenKind) -> Option<Token> {
-        let token = self.lexer.fetch_token().unwrap();
+        let token = self.lexer.fetch_token();
         if token.kind == kind {
             Some(token)
         } else {
@@ -166,7 +166,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expect_token(&mut self, kind: TokenKind) -> Token {
-        let token = self.lexer.fetch_token().unwrap();
+        let token = self.lexer.fetch_token();
         assert_eq!(
             token.kind, kind,
             "Line {}, column {}: Expected {:?}, got {:?}",

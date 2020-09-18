@@ -1,6 +1,5 @@
 mod ast;
 mod driver;
-mod error;
 mod generator;
 mod ir;
 mod lexer;
