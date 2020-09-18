@@ -51,3 +51,17 @@ impl Type {
         self.level * 4
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Variable {
+    pub r#type: Type,
+    pub offset: usize,
+}
+
+// pub fn mangle_function_name(name: &String) -> String {
+//     "__".to_string() + name
+// }
+
+// pub fn get_function_epilogue(name: &String) -> String {
+//     "_epilogue_".to_string() + name
+// }

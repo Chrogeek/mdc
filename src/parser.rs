@@ -31,23 +31,48 @@ impl<'a> Parser<'a> {
         self.expect_token(TokenKind::LeftParenthesis);
         self.expect_token(TokenKind::RightParenthesis);
         self.expect_token(TokenKind::LeftBrace);
-        let body = self.parse_statement();
-        self.expect_token(TokenKind::RightBrace);
+        let mut body = Vec::new();
+        while let None = self.accept_token(TokenKind::RightBrace) {
+            body.push(self.parse_statement());
+        }
         Function { r#type, name, body }
     }
 
     fn parse_statement(&mut self) -> Statement {
-        let ans = if let Some(_) = self.accept_token(TokenKind::Return) {
+        let ans = if self.try_token(TokenKind::Semicolon) {
+            Statement::Empty
+        } else if let Some(_) = self.accept_token(TokenKind::Return) {
             Statement::Return(self.parse_expression())
+        } else if let Some(_) = self.accept_token(TokenKind::Int) {
+            Statement::Declaration {
+                r#type: Type { level: 0 },
+                name: String::from_utf8_lossy(self.expect_token(TokenKind::Identifier).slice)
+                    .to_string(),
+                default: if let Some(_) = self.accept_token(TokenKind::Assign) {
+                    Some(self.parse_expression())
+                } else {
+                    None
+                },
+            }
         } else {
-            unreachable!();
+            Statement::Expression(self.parse_expression())
         };
         self.expect_token(TokenKind::Semicolon);
         ans
     }
 
     fn parse_expression(&mut self) -> Expression {
-        self.parse_logical_or()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> Expression {
+        if let Some(name) = self.accept_token(TokenKind::Identifier) {
+            let name = String::from_utf8_lossy(name.slice).to_string();
+            self.expect_token(TokenKind::Assign);
+            Expression::Assignment(name, Box::new(self.parse_expression()))
+        } else {
+            self.parse_logical_or()
+        }
     }
 
     fn parse_logical_or(&mut self) -> Expression {
@@ -148,6 +173,9 @@ impl<'a> Parser<'a> {
             let expression = self.parse_expression();
             self.expect_token(TokenKind::RightParenthesis);
             expression
+        } else if let Some(name) = self.accept_token(TokenKind::Identifier) {
+            let name = String::from_utf8_lossy(name.slice).to_string();
+            Expression::Identifier(name)
         } else {
             let token = self.expect_token(TokenKind::Integer);
             let value = String::from_utf8(token.slice.to_vec()).unwrap();
@@ -158,6 +186,8 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // Accepts a token with specified kind.
+    // If fails, returns 'None' and put the token back.
     fn accept_token(&mut self, kind: TokenKind) -> Option<Token> {
         let token = self.lexer.fetch_token();
         if token.kind == kind {
@@ -168,6 +198,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // Expects the next token to be with the specified kind, panics if fails.
     fn expect_token(&mut self, kind: TokenKind) -> Token {
         let token = self.lexer.fetch_token();
         assert_eq!(
@@ -176,5 +207,17 @@ impl<'a> Parser<'a> {
             self.lexer.row, self.lexer.col, kind, token.kind
         );
         token
+    }
+
+    // Like 'accept_token', but always puts the token back, whether succeeds or not
+    fn try_token(&mut self, kind: TokenKind) -> bool {
+        let token = self.lexer.fetch_token();
+        if token.kind == kind {
+            self.lexer.unget_token(token);
+            true
+        } else {
+            self.lexer.unget_token(token);
+            false
+        }
     }
 }

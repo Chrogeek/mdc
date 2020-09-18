@@ -25,7 +25,7 @@ impl Ast for Program {
 pub struct Function {
     pub r#type: Type,
     pub name: String,
-    pub body: Statement,
+    pub body: Vec<Statement>,
 }
 
 impl Ast for Function {
@@ -34,32 +34,72 @@ impl Ast for Function {
             ".globl {0}\n{0}:",
             self.name
         )));
-        self.body.emit(context);
+        for statement in self.body.iter() {
+            statement.emit(context);
+        }
     }
 }
 
 #[derive(Debug)]
 pub enum Statement {
-    // Empty,
+    Empty,
     Return(Expression),
-    // Declaration,
-    // Expression(Expression),
+    Expression(Expression),
+    Declaration {
+        // To be deleted on step 7
+        r#type: Type,
+        name: String,
+        default: Option<Expression>,
+    },
 }
 
 impl Ast for Statement {
     fn emit(&self, context: &mut Context) {
         match self {
+            Statement::Empty => {}
             Statement::Return(expression) => {
                 expression.emit(context);
                 context.ir.push(Instruction::Return);
+            }
+            Statement::Expression(expression) => {
+                expression.emit(context);
+                context.ir.push(Instruction::Pop);
+            }
+            Statement::Declaration {
+                r#type,
+                name,
+                default,
+            } => {
+                let offset = context.create_variable(r#type, name).offset;
+                if let Some(expression) = default {
+                    context.ir.push(Instruction::FrameAddress(offset));
+                    expression.emit(context);
+                    context.ir.push(Instruction::Store);
+                    context.ir.push(Instruction::Pop);
+                }
             }
         };
     }
 }
 
+// To be available on step 7
+// #[derive(Debug)]
+// pub struct Declaration {
+//     r#type: Type,
+//     name: String,
+//     default: Option<Expression>,
+// }
+
+// impl Ast for Declaration {
+//     fn emit(&self, context: &mut Context) {
+//         unimplemented!()
+//     }
+// }
+
 #[derive(Debug)]
 pub enum Expression {
     IntegerLiteral(i32),
+    Identifier(String),
     Negation(Box<Expression>),
     Not(Box<Expression>),
     LogicalNot(Box<Expression>),
@@ -76,6 +116,7 @@ pub enum Expression {
     GreaterEqual(Box<Expression>, Box<Expression>),
     LogicalAnd(Box<Expression>, Box<Expression>),
     LogicalOr(Box<Expression>, Box<Expression>),
+    Assignment(String, Box<Expression>),
 }
 
 impl Ast for Expression {
@@ -90,6 +131,11 @@ impl Ast for Expression {
 
         match self {
             Expression::IntegerLiteral(value) => context.ir.push(Instruction::Push(*value)),
+            Expression::Identifier(name) => {
+                let offset = context.access_variable(name).offset;
+                context.ir.push(Instruction::FrameAddress(offset));
+                context.ir.push(Instruction::Load);
+            }
             Expression::Negation(rhs) => {
                 rhs.emit(context);
                 context.ir.push(Instruction::Negate);
@@ -119,6 +165,12 @@ impl Ast for Expression {
             }
             Expression::LogicalAnd(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, LogicalAnd),
             Expression::LogicalOr(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, LogicalOr),
+            Expression::Assignment(lhs, rhs) => {
+                rhs.emit(context);
+                let offset = context.access_variable(lhs).offset;
+                context.ir.push(Instruction::FrameAddress(offset));
+                context.ir.push(Instruction::Store);
+            }
         }
     }
 }
