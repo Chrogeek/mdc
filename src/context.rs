@@ -4,22 +4,25 @@ use std::collections::HashSet;
 use std::io::Write;
 
 macro_rules! assembly {
-    ($($instruction: expr),*) => {{
-        let mut asm = Assembly::new();
-        $(asm.add($instruction);)*
-        asm
-    }};
+    ($this: expr, $($instruction: expr),*) => {{
+            $(
+                writeln!($this.output, "{}", $instruction.to_string()).unwrap();
+            )*
+        }
+    };
 }
 
 macro_rules! binary_operator_assembly {
-    ($($instruction: expr),*) => {
-        assembly!(
+    ($this: expr, $($instruction: expr),*) => {
+        assembly!($this,
             "lw t1, 4(sp)", "lw t2, 0(sp)", $($instruction,)* "addi sp, sp, 4", "sw t1, 0(sp)"
         )
     };
 }
 
-pub struct Context {
+pub struct Context<T: Write> {
+    output: T,
+
     variables: HashSet<String>,
     current_function: Option<String>,
     label_count: usize,
@@ -28,9 +31,10 @@ pub struct Context {
     offset: usize,
 }
 
-impl Context {
-    pub fn new() -> Context {
+impl<T: Write> Context<T> {
+    pub fn new(output: T) -> Context<T> {
         Context {
+            output,
             variables: HashSet::new(),
             current_function: None,
             label_count: 0,
@@ -39,17 +43,15 @@ impl Context {
         }
     }
 
-    pub fn create_variable(&mut self, r#type: &Type, name: &String) -> Assembly {
+    pub fn create_variable(&mut self, r#type: &Type, name: &String) {
         if self.variables.insert(name.clone()) {
-            // self.ir
-            //     .push(Instruction::Allocate(r#type.measure(), name.clone()));
             self.put_allocate(r#type.measure(), name.clone())
         } else {
             panic!("Redefinition of variable {}", name);
         }
     }
 
-    pub fn access_variable(&mut self, name: &String) -> Assembly {
+    pub fn access_variable(&mut self, name: &String) {
         if self.variables.contains(name) {
             self.put_locate(name.clone())
         } else {
@@ -57,7 +59,7 @@ impl Context {
         }
     }
 
-    pub fn enter_function(&mut self, function_name: &String) -> Assembly {
+    pub fn enter_function(&mut self, function_name: &String) {
         self.current_function = Some(function_name.clone());
         self.put_directive(&format!(
             ".globl {0}\n{0}:",
@@ -65,7 +67,7 @@ impl Context {
         ))
     }
 
-    pub fn exit_function(&mut self) -> Assembly {
+    pub fn exit_function(&mut self) {
         let assembly = self.put_directive(&format!(
             "{0}:",
             get_function_epilogue(&self.current_function.clone().unwrap())
@@ -79,27 +81,29 @@ impl Context {
         "_label_".to_string() + &self.label_count.to_string()
     }
 
-    pub fn put_directive(&self, directive: &str) -> Assembly {
-        assembly!(directive)
+    pub fn put_directive(&mut self, directive: &str) {
+        assembly!(self, directive)
     }
 
-    pub fn put_push(&mut self, value: i32) -> Assembly {
+    pub fn put_push(&mut self, value: i32) {
         self.offset += 4;
         assembly!(
+            self,
             "addi sp, sp, -4",
             &format!("li t1, {}", value),
             "sw t1, 0(sp)"
         )
     }
 
-    pub fn put_pop(&mut self) -> Assembly {
+    pub fn put_pop(&mut self) {
         self.offset -= 4;
-        assembly!("addi sp, sp, 4")
+        assembly!(self, "addi sp, sp, 4")
     }
 
-    pub fn put_return(&mut self) -> Assembly {
+    pub fn put_return(&mut self) {
         self.offset -= 4;
         assembly!(
+            self,
             "lw a0, 0(sp)",
             "addi sp, sp, 4",
             &format!(
@@ -109,90 +113,91 @@ impl Context {
         )
     }
 
-    pub fn put_negate(&self) -> Assembly {
-        assembly!("lw t1, 0(sp)", "neg t1, t1", "sw t1, 0(sp)")
+    pub fn put_negate(&mut self) {
+        assembly!(self, "lw t1, 0(sp)", "neg t1, t1", "sw t1, 0(sp)")
     }
 
-    pub fn put_not(&self) -> Assembly {
-        assembly!("lw t1, 0(sp)", "not t1, t1", "sw t1, 0(sp)")
+    pub fn put_not(&mut self) {
+        assembly!(self, "lw t1, 0(sp)", "not t1, t1", "sw t1, 0(sp)")
     }
 
-    pub fn put_logical_not(&self) -> Assembly {
-        assembly!("lw t1, 0(sp)", "seqz t1, t1", "sw t1, 0(sp)")
+    pub fn put_logical_not(&mut self) {
+        assembly!(self, "lw t1, 0(sp)", "seqz t1, t1", "sw t1, 0(sp)")
     }
 
-    pub fn put_add(&mut self) -> Assembly {
+    pub fn put_add(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("add t1, t1, t2")
+        binary_operator_assembly!(self, "add t1, t1, t2")
     }
 
-    pub fn put_subtract(&mut self) -> Assembly {
+    pub fn put_subtract(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("sub t1, t1, t2")
+        binary_operator_assembly!(self, "sub t1, t1, t2")
     }
 
-    pub fn put_multiply(&mut self) -> Assembly {
+    pub fn put_multiply(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("mul t1, t1, t2")
+        binary_operator_assembly!(self, "mul t1, t1, t2")
     }
 
-    pub fn put_divide(&mut self) -> Assembly {
+    pub fn put_divide(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("div t1, t1, t2")
+        binary_operator_assembly!(self, "div t1, t1, t2")
     }
 
-    pub fn put_modulo(&mut self) -> Assembly {
+    pub fn put_modulo(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("rem t1, t1, t2")
+        binary_operator_assembly!(self, "rem t1, t1, t2")
     }
 
-    pub fn put_equal(&mut self) -> Assembly {
+    pub fn put_equal(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("sub t1, t1, t2", "seqz t1, t1")
+        binary_operator_assembly!(self, "sub t1, t1, t2", "seqz t1, t1")
     }
 
-    pub fn put_unequal(&mut self) -> Assembly {
+    pub fn put_unequal(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("sub t1, t1, t2", "snez t1, t1")
+        binary_operator_assembly!(self, "sub t1, t1, t2", "snez t1, t1")
     }
 
-    pub fn put_less(&mut self) -> Assembly {
+    pub fn put_less(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("slt t1, t1, t2")
+        binary_operator_assembly!(self, "slt t1, t1, t2")
     }
 
-    pub fn put_less_equal(&mut self) -> Assembly {
+    pub fn put_less_equal(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("slt t1, t2, t1", "seqz t1, t1")
+        binary_operator_assembly!(self, "slt t1, t2, t1", "seqz t1, t1")
     }
 
-    pub fn put_greater(&mut self) -> Assembly {
+    pub fn put_greater(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("slt t1, t2, t1")
+        binary_operator_assembly!(self, "slt t1, t2, t1")
     }
 
-    pub fn put_greater_equal(&mut self) -> Assembly {
+    pub fn put_greater_equal(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("slt t1, t1, t2", "seqz t1, t1")
+        binary_operator_assembly!(self, "slt t1, t1, t2", "seqz t1, t1")
     }
 
-    pub fn put_logical_and(&mut self) -> Assembly {
+    pub fn put_logical_and(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("snez t1, t1", "snez t2, t2", "and t1, t1, t2")
+        binary_operator_assembly!(self, "snez t1, t1", "snez t2, t2", "and t1, t1, t2")
     }
 
-    pub fn put_logical_or(&mut self) -> Assembly {
+    pub fn put_logical_or(&mut self) {
         self.offset -= 4;
-        binary_operator_assembly!("or t1, t1, t2", "snez t1, t1")
+        binary_operator_assembly!(self, "or t1, t1, t2", "snez t1, t1")
     }
 
-    pub fn put_load(&self) -> Assembly {
-        assembly!("lw t1, 0(sp)", "lw t1, 0(t1)", "sw t1, 0(sp)")
+    pub fn put_load(&mut self) {
+        assembly!(self, "lw t1, 0(sp)", "lw t1, 0(t1)", "sw t1, 0(sp)")
     }
 
-    pub fn put_store(&mut self) -> Assembly {
+    pub fn put_store(&mut self) {
         self.offset -= 4;
         assembly!(
+            self,
             "lw t1, 4(sp)",
             "lw t2, 0(sp)",
             "addi sp, sp, 4",
@@ -200,35 +205,38 @@ impl Context {
         )
     }
 
-    pub fn put_allocate(&mut self, size: usize, name: String) -> Assembly {
+    pub fn put_allocate(&mut self, size: usize, name: String) {
         self.offset += size;
         self.lookup.insert(name.clone(), self.offset);
-        assembly!(&format!("addi sp, sp, -{}", size))
+        assembly!(self, &format!("addi sp, sp, -{}", size))
     }
 
-    pub fn put_locate(&mut self, name: String) -> Assembly {
+    pub fn put_locate(&mut self, name: String) {
         self.offset += 4;
         assembly!(
+            self,
             "addi sp, sp, -4",
             &format!("addi t1, fp, -{}", self.lookup.get(&name).unwrap()),
             "sw t1, 0(sp)"
         )
     }
 
-    pub fn put_set_frame(&mut self, name: String) -> Assembly {
+    pub fn put_set_frame(&mut self, name: String) {
         self.offset = 0;
         self.current_function = Some(name.clone());
         assembly!(
+            self,
             "addi sp, sp, -4",
             "sw fp, 0(sp)",   // save fp
             "addi fp, sp, 0"  // start new stack frame
         )
     }
 
-    pub fn put_end_frame(&mut self) -> Assembly {
+    pub fn put_end_frame(&mut self) {
         self.offset = 0;
         self.current_function = None;
         assembly!(
+            self,
             "addi sp, fp, 0", // free local variables
             "lw t1, 0(sp)",
             "addi sp, sp, 4",
@@ -237,48 +245,21 @@ impl Context {
         )
     }
 
-    pub fn put_jump_zero(&mut self, label: String) -> Assembly {
+    pub fn put_jump_zero(&mut self, label: String) {
         self.offset -= 4;
         assembly!(
+            self,
             "lw t1, 0(sp)",
             "addi sp, sp, 4",
             &format!("beqz t1, {}", label)
         )
     }
 
-    pub fn put_jump(&self, label: String) -> Assembly {
-        assembly!(&format!("j {}", label))
+    pub fn put_jump(&mut self, label: String) {
+        assembly!(self, &format!("j {}", label))
     }
 
-    pub fn put_label(&self, label: String) -> Assembly {
-        assembly!(&format!("{}:", label))
-    }
-}
-
-pub struct Assembly {
-    assembly: Vec<String>,
-}
-
-impl Assembly {
-    pub fn new() -> Assembly {
-        Assembly {
-            assembly: Vec::new(),
-        }
-    }
-
-    pub fn dump(&self, output: &mut impl Write) -> Result<(), std::io::Error> {
-        for assembly in self.assembly.iter() {
-            writeln!(output, "{}", assembly)?;
-        }
-        Ok(())
-    }
-
-    pub fn add(&mut self, assembly: &str) {
-        self.assembly.push(assembly.to_string());
-    }
-
-    pub fn append(mut self, mut other: Assembly) -> Assembly {
-        self.assembly.append(&mut other.assembly);
-        self
+    pub fn put_label(&mut self, label: String) {
+        assembly!(self, &format!("{}:", label))
     }
 }
