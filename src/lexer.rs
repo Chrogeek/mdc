@@ -21,6 +21,8 @@ impl<'a> Lexer<'a> {
         match input {
             b"int" => TokenKind::Int,
             b"return" => TokenKind::Return,
+            b"if" => TokenKind::If,
+            b"else" => TokenKind::Else,
             _ => TokenKind::Identifier,
         }
     }
@@ -30,13 +32,11 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn fetch_token(&mut self) -> Token {
-        let ans = if !self.ungot_tokens.is_empty() {
-            let token = self.ungot_tokens.pop().unwrap();
-            token
+        if !self.ungot_tokens.is_empty() {
+            self.ungot_tokens.pop().unwrap()
         } else {
             self.get_token()
-        };
-        ans
+        }
     }
 
     fn get_token(&mut self) -> Token {
@@ -182,6 +182,8 @@ impl<'a> Lexer<'a> {
                 b'>' => make_double_symbol_match_arm!(b'=', Greater, GreaterEqual),
                 b'&' => make_double_symbol_match_arm!(b'&', And, LogicalAnd),
                 b'|' => make_double_symbol_match_arm!(b'|', Or, LogicalOr),
+                b'?' => make_single_symbol_match_arm!(Question),
+                b':' => make_single_symbol_match_arm!(Colon),
                 _ => panic!(
                     "Line {}, column {}: Unknown symbol '{}'",
                     self.row, self.col, self.source[0]

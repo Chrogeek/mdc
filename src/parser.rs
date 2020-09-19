@@ -32,31 +32,61 @@ impl Parser<'_> {
         self.expect_token(TokenKind::LeftBrace);
         let mut body = Vec::new();
         while let None = self.accept_token(TokenKind::RightBrace) {
-            body.push(self.parse_statement());
+            body.push(self.parse_block_item());
         }
         Function { r#type, name, body }
     }
 
     fn parse_statement(&mut self) -> Statement {
-        let ans = if self.try_token(TokenKind::Semicolon) {
+        if let Some(_) = self.accept_token(TokenKind::Semicolon) {
             Statement::Empty
         } else if let Some(_) = self.accept_token(TokenKind::Return) {
-            Statement::Return(self.parse_expression())
-        } else if let Some(_) = self.accept_token(TokenKind::Int) {
-            Statement::Declaration {
-                r#type: Type { level: 0 },
-                name: self.expect_token(TokenKind::Identifier).text,
-                default: if let Some(_) = self.accept_token(TokenKind::Assign) {
-                    Some(self.parse_expression())
-                } else {
-                    None
-                },
+            let ans = Statement::Return(self.parse_expression());
+            self.expect_token(TokenKind::Semicolon);
+            ans
+        } else if let Some(_) = self.accept_token(TokenKind::If) {
+            self.expect_token(TokenKind::LeftParenthesis);
+            let condition = self.parse_expression();
+            self.expect_token(TokenKind::RightParenthesis);
+            let true_branch = Box::new(self.parse_statement());
+            let false_branch = if let Some(_) = self.accept_token(TokenKind::Else) {
+                Some(Box::new(self.parse_statement()))
+            } else {
+                None
+            };
+            Statement::If {
+                condition,
+                true_branch,
+                false_branch,
             }
         } else {
-            Statement::Expression(self.parse_expression())
+            let ans = Statement::Expression(self.parse_expression());
+            self.expect_token(TokenKind::Semicolon);
+            ans
+        }
+    }
+
+    fn parse_declaration(&mut self) -> Declaration {
+        self.expect_token(TokenKind::Int);
+        let ans = Declaration {
+            r#type: Type { level: 0 },
+            name: self.expect_token(TokenKind::Identifier).text,
+            default: if let Some(_) = self.accept_token(TokenKind::Assign) {
+                Some(self.parse_expression())
+            } else {
+                None
+            },
         };
         self.expect_token(TokenKind::Semicolon);
         ans
+    }
+
+    fn parse_block_item(&mut self) -> BlockItem {
+        if self.try_token(TokenKind::Int) {
+            BlockItem::Declaration(self.parse_declaration())
+        } else {
+            BlockItem::Statement(self.parse_statement())
+        }
     }
 
     fn parse_expression(&mut self) -> Expression {
@@ -72,10 +102,26 @@ impl Parser<'_> {
                     Expression::Assignment(name, Box::new(self.parse_expression()))
                 } else {
                     self.lexer.unget_token(token);
-                    self.parse_logical_or()
+                    self.parse_ternary()
                 }
             }
-            None => self.parse_logical_or(),
+            None => self.parse_ternary(),
+        }
+    }
+
+    fn parse_ternary(&mut self) -> Expression {
+        let condition = self.parse_logical_or();
+        if let Some(_) = self.accept_token(TokenKind::Question) {
+            let true_part = self.parse_expression();
+            self.expect_token(TokenKind::Colon);
+            let false_part = self.parse_ternary();
+            Expression::Ternary(
+                Box::new(condition),
+                Box::new(true_part),
+                Box::new(false_part),
+            )
+        } else {
+            condition
         }
     }
 

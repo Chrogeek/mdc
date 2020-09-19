@@ -28,9 +28,13 @@ pub enum TokenKind {
     Or,  // but we reserve them here for convenience
     LogicalAnd,
     LogicalOr,
+    Question,
+    Colon,
     // Keywords
     Int,
     Return,
+    If,
+    Else,
 }
 
 #[derive(Debug, Clone)]

@@ -31,12 +31,16 @@ pub enum Instruction {
     Allocate(usize, String),
     SetFrame(String),
     EndFrame,
+    JumpOnZero(String),
+    Jump(String),
+    Label(String),
 }
 
 pub struct Context {
     pub ir: Vec<Instruction>,
     variables: HashSet<String>,
     current_function: Option<String>,
+    label_count: usize,
 }
 
 impl Context {
@@ -45,6 +49,7 @@ impl Context {
             ir: Vec::new(),
             variables: HashSet::new(),
             current_function: None,
+            label_count: 0,
         }
     }
 
@@ -81,6 +86,11 @@ impl Context {
         self.current_function = None;
     }
 
+    pub fn next_label(&mut self) -> String {
+        self.label_count += 1;
+        "_label_".to_string() + &self.label_count.to_string()
+    }
+
     pub fn assemble(&mut self, output: &mut impl Write) -> Result<(), std::io::Error> {
         let mut offset: usize = 0;
         let mut lookup = HashMap::<String, usize>::new();
@@ -93,8 +103,8 @@ impl Context {
 
         macro_rules! write_binary_operator_instructions {
             ($($instruction: expr),+) => {
-                offset += 4;
-                write_instructions!("lw t1, 4(sp)", "lw t2, 0(sp)", $($instruction),+, "sw t1, 4(sp)", "addi sp, sp, 4");
+                offset -= 4;
+                write_instructions!("lw t1, 4(sp)", "lw t2, 0(sp)", $($instruction),+, "addi sp, sp, 4", "sw t1, 0(sp)");
             }
         }
 
@@ -114,7 +124,7 @@ impl Context {
                     write_instructions!("addi sp, sp, 4");
                 }
                 Instruction::Return => {
-                    offset += 4;
+                    offset -= 4;
                     write_instructions!("lw a0, 0(sp)", "addi sp, sp, 4");
                     writeln!(
                         output,
@@ -200,15 +210,27 @@ impl Context {
                 Instruction::SetFrame(name) => {
                     write_instructions!("addi sp, sp, -4", "sw fp, 0(sp)"); // save fp
                     offset = 0;
-                    write_instructions!("addi fp, sp, 0");
+                    write_instructions!("addi fp, sp, 0"); // start new stack frame
                     self.current_function = Some(name.clone());
                 }
                 Instruction::EndFrame => {
-                    writeln!(output, "addi sp, sp, {}", offset)?; // free local variables
-                    write_instructions!("lw t1, 0(sp)", "addi sp, sp, 4", "sw t1, 0(fp)");
+                    offset = 0;
+                    write_instructions!("addi sp, fp, 0"); // free local variables
+                    write_instructions!("lw t1, 0(sp)", "addi sp, sp, 4", "addi fp, t1, 0");
                     // restore fp
                     write_instructions!("jr ra"); // jump return
                     self.current_function = None;
+                }
+                Instruction::JumpOnZero(label) => {
+                    offset -= 4;
+                    write_instructions!("lw t1, 0(sp)", "addi sp, sp, 4");
+                    writeln!(output, "beqz t1, {}", label)?;
+                }
+                Instruction::Jump(label) => {
+                    writeln!(output, "j {}", label)?;
+                }
+                Instruction::Label(label) => {
+                    writeln!(output, "{}:", label)?;
                 }
             };
         }
