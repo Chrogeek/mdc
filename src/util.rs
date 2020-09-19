@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     // Special
     Integer,
@@ -33,12 +33,12 @@ pub enum TokenKind {
     Return,
 }
 
-#[derive(Debug)]
-pub struct Token<'a> {
+#[derive(Debug, Clone)]
+pub struct Token {
     pub kind: TokenKind,
-    pub slice: &'a [u8], // token from the source code (as byte slice)
-    pub row: usize,      // beginning position of this token
-    pub col: usize,      // ending position of this token
+    pub text: String, // token from the source code (as string)
+    pub row: usize,   // beginning position of this token
+    pub col: usize,   // ending position of this token
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,11 @@ pub struct Type {
 
 impl Type {
     pub fn measure(&self) -> usize {
-        self.level * 4
+        if self.level == 0 {
+            4
+        } else {
+            8
+        }
     }
 }
 
@@ -58,10 +62,10 @@ pub struct Variable {
     pub offset: usize,
 }
 
-// pub fn mangle_function_name(name: &String) -> String {
-//     "__".to_string() + name
-// }
+pub fn mangle_function_name(name: &String) -> String {
+    "__".to_string() + name
+}
 
-// pub fn get_function_epilogue(name: &String) -> String {
-//     "_epilogue_".to_string() + name
-// }
+pub fn get_function_epilogue(name: &String) -> String {
+    "_epilogue_".to_string() + name
+}

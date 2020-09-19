@@ -1,7 +1,6 @@
 mod ast;
+mod context;
 mod driver;
-mod generator;
-mod ir;
 mod lexer;
 mod parser;
 mod util;

@@ -6,8 +6,8 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a [u8]) -> Parser {
+impl Parser<'_> {
+    pub fn new(source: &'_ [u8]) -> Parser {
         Parser {
             lexer: Lexer::new(source),
         }
@@ -26,8 +26,7 @@ impl<'a> Parser<'a> {
 
     fn parse_function(&mut self) -> Function {
         let r#type = self.parse_type();
-        let name =
-            String::from_utf8_lossy(self.expect_token(TokenKind::Identifier).slice).to_string();
+        let name = self.expect_token(TokenKind::Identifier).text;
         self.expect_token(TokenKind::LeftParenthesis);
         self.expect_token(TokenKind::RightParenthesis);
         self.expect_token(TokenKind::LeftBrace);
@@ -46,8 +45,7 @@ impl<'a> Parser<'a> {
         } else if let Some(_) = self.accept_token(TokenKind::Int) {
             Statement::Declaration {
                 r#type: Type { level: 0 },
-                name: String::from_utf8_lossy(self.expect_token(TokenKind::Identifier).slice)
-                    .to_string(),
+                name: self.expect_token(TokenKind::Identifier).text,
                 default: if let Some(_) = self.accept_token(TokenKind::Assign) {
                     Some(self.parse_expression())
                 } else {
@@ -66,12 +64,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_assignment(&mut self) -> Expression {
-        if let Some(name) = self.accept_token(TokenKind::Identifier) {
-            let name = String::from_utf8_lossy(name.slice).to_string();
-            self.expect_token(TokenKind::Assign);
-            Expression::Assignment(name, Box::new(self.parse_expression()))
-        } else {
-            self.parse_logical_or()
+        match self.accept_token(TokenKind::Identifier) {
+            Some(token) => {
+                if self.try_token(TokenKind::Assign) {
+                    let name = token.text;
+                    self.expect_token(TokenKind::Assign);
+                    Expression::Assignment(name, Box::new(self.parse_expression()))
+                } else {
+                    self.lexer.unget_token(token);
+                    self.parse_logical_or()
+                }
+            }
+            None => self.parse_logical_or(),
         }
     }
 
@@ -174,11 +178,11 @@ impl<'a> Parser<'a> {
             self.expect_token(TokenKind::RightParenthesis);
             expression
         } else if let Some(name) = self.accept_token(TokenKind::Identifier) {
-            let name = String::from_utf8_lossy(name.slice).to_string();
+            let name = name.text;
             Expression::Identifier(name)
         } else {
             let token = self.expect_token(TokenKind::Integer);
-            let value = String::from_utf8(token.slice.to_vec()).unwrap();
+            let value = token.text;
             let value = value // Should not invoke any error
                 .parse()
                 .expect(&format!("Cannot cast '{}' to an 'int' literal", value));

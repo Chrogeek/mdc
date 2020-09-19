@@ -4,7 +4,7 @@ pub struct Lexer<'a> {
     source: &'a [u8],
     pub row: usize,
     pub col: usize,
-    ungot_tokens: Vec<Token<'a>>,
+    ungot_tokens: Vec<Token>,
 }
 
 impl<'a> Lexer<'a> {
@@ -25,11 +25,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn unget_token(&mut self, token: Token<'a>) {
+    pub fn unget_token(&mut self, token: Token) {
         self.ungot_tokens.push(token);
     }
 
-    pub fn fetch_token(&mut self) -> Token<'a> {
+    pub fn fetch_token(&mut self) -> Token {
         let ans = if !self.ungot_tokens.is_empty() {
             let token = self.ungot_tokens.pop().unwrap();
             token
@@ -39,7 +39,7 @@ impl<'a> Lexer<'a> {
         ans
     }
 
-    fn get_token(&mut self) -> Token<'a> {
+    fn get_token(&mut self) -> Token {
         macro_rules! make_single_symbol_match_arm {
             ($target: ident) => {{
                 self.col += 1;
@@ -47,7 +47,7 @@ impl<'a> Lexer<'a> {
                 self.source = remaining;
                 Token {
                     kind: TokenKind::$target,
-                    slice: token,
+                    text: String::from_utf8_lossy(token).to_string(),
                     row: self.row,
                     col: self.col - 1,
                 }
@@ -62,7 +62,7 @@ impl<'a> Lexer<'a> {
                     self.source = remaining;
                     Token {
                         kind: TokenKind::$target1,
-                        slice: token,
+                        text: String::from_utf8_lossy(token).to_string(),
                         row: self.row,
                         col: self.col - 1,
                     }
@@ -72,7 +72,7 @@ impl<'a> Lexer<'a> {
                     self.source = remaining;
                     Token {
                         kind: TokenKind::$target2,
-                        slice: token,
+                        text: String::from_utf8_lossy(token).to_string(),
                         row: self.row,
                         col: self.col - 2,
                     }
@@ -101,7 +101,7 @@ impl<'a> Lexer<'a> {
             // EOF
             Token {
                 kind: TokenKind::Eof,
-                slice: b"",
+                text: "".to_string(),
                 row: self.row,
                 col: self.col,
             }
@@ -115,7 +115,7 @@ impl<'a> Lexer<'a> {
                         self.source = remaining;
                         break Token {
                             kind: TokenKind::Integer,
-                            slice: token,
+                            text: String::from_utf8_lossy(token).to_string(),
                             row: self.row,
                             col: self.col - offset,
                         };
@@ -128,7 +128,7 @@ impl<'a> Lexer<'a> {
                             self.source = remaining;
                             break Token {
                                 kind: TokenKind::Integer,
-                                slice: token,
+                                text: String::from_utf8_lossy(token).to_string(),
                                 row: self.row,
                                 col: self.col - offset,
                             };
@@ -143,7 +143,7 @@ impl<'a> Lexer<'a> {
                         self.source = remaining;
                         break Token {
                             kind: Self::recognize_keyword(self.source),
-                            slice: token,
+                            text: String::from_utf8_lossy(token).to_string(),
                             row: self.row,
                             col: self.col - offset,
                         };
@@ -158,7 +158,7 @@ impl<'a> Lexer<'a> {
                             self.source = remaining;
                             break Token {
                                 kind: Self::recognize_keyword(token),
-                                slice: token,
+                                text: String::from_utf8_lossy(token).to_string(),
                                 row: self.row,
                                 col: self.col - offset,
                             };

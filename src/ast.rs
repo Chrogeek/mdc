@@ -1,6 +1,5 @@
-use crate::ir::Context;
-use crate::ir::Instruction;
-use crate::util::Type;
+use crate::context::*;
+use crate::util::*;
 
 pub trait Ast {
     fn emit(&self, context: &mut Context);
@@ -17,6 +16,10 @@ impl Ast for Program {
             panic!("No entry point 'main' defined");
         }
         context.ir.push(Instruction::Directive(".text".to_string()));
+        context
+            .ir
+            .push(Instruction::Directive(".globl main".to_string()));
+        context.ir.push(Instruction::Directive("main:".to_string()));
         self.function.emit(context);
     }
 }
@@ -30,13 +33,18 @@ pub struct Function {
 
 impl Ast for Function {
     fn emit(&self, context: &mut Context) {
-        context.ir.push(Instruction::Directive(format!(
-            ".globl {0}\n{0}:",
-            self.name
-        )));
+        context.enter_function(&self.name);
+        context.ir.push(Instruction::SetFrame(self.name.clone()));
         for statement in self.body.iter() {
             statement.emit(context);
         }
+        if self.name == "main" {
+            // default return for 'main' function
+            context.ir.push(Instruction::Push(0));
+            context.ir.push(Instruction::Return);
+        }
+        context.exit_function();
+        context.ir.push(Instruction::EndFrame);
     }
 }
 
@@ -70,10 +78,10 @@ impl Ast for Statement {
                 name,
                 default,
             } => {
-                let offset = context.create_variable(r#type, name).offset;
+                context.create_variable(r#type, name);
                 if let Some(expression) = default {
-                    context.ir.push(Instruction::FrameAddress(offset));
                     expression.emit(context);
+                    context.ir.push(Instruction::Locate(name.clone()));
                     context.ir.push(Instruction::Store);
                     context.ir.push(Instruction::Pop);
                 }
@@ -132,8 +140,7 @@ impl Ast for Expression {
         match self {
             Expression::IntegerLiteral(value) => context.ir.push(Instruction::Push(*value)),
             Expression::Identifier(name) => {
-                let offset = context.access_variable(name).offset;
-                context.ir.push(Instruction::FrameAddress(offset));
+                context.access_variable(name);
                 context.ir.push(Instruction::Load);
             }
             Expression::Negation(rhs) => {
@@ -167,8 +174,7 @@ impl Ast for Expression {
             Expression::LogicalOr(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, LogicalOr),
             Expression::Assignment(lhs, rhs) => {
                 rhs.emit(context);
-                let offset = context.access_variable(lhs).offset;
-                context.ir.push(Instruction::FrameAddress(offset));
+                context.access_variable(lhs);
                 context.ir.push(Instruction::Store);
             }
         }
