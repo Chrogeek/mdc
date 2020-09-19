@@ -16,7 +16,6 @@ fn main() -> Result<(), std::io::Error> {
     let mut context = Context::new();
     Parser::new(input.as_slice())
         .parse_program()
-        .emit(&mut context);
-    eprintln!("{:#?}", context.ir);
-    context.assemble(&mut std::io::stdout())
+        .emit(&mut context)
+        .dump(&mut std::io::stdout())
 }
