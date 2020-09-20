@@ -305,7 +305,9 @@ impl<T: Write> Ast<T> for Expression {
                 context.leave_scope();
                 context.put_label(label_2);
             }
-            Expression::FunctionCall(_) => {}
+            Expression::FunctionCall(_) => {
+                unimplemented!();
+            }
         }
     }
 }

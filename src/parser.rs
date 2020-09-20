@@ -68,7 +68,7 @@ impl Parser<'_> {
             r#type,
             name,
             parameters,
-            body: if let Some(_) = self.accept_token(TokenKind::Semicolon) {
+            body: if self.accept_token(TokenKind::Semicolon).is_some() {
                 None
             } else {
                 Some(self.parse_compound())
@@ -86,18 +86,18 @@ impl Parser<'_> {
     }
 
     fn parse_statement(&mut self) -> Statement {
-        if let Some(_) = self.accept_token(TokenKind::Semicolon) {
+        if self.accept_token(TokenKind::Semicolon).is_some() {
             Statement::Empty
-        } else if let Some(_) = self.accept_token(TokenKind::Return) {
+        } else if self.accept_token(TokenKind::Return).is_some() {
             let ans = Statement::Return(self.parse_expression());
             self.expect_token(TokenKind::Semicolon);
             ans
-        } else if let Some(_) = self.accept_token(TokenKind::If) {
+        } else if self.accept_token(TokenKind::If).is_some() {
             self.expect_token(TokenKind::LeftParenthesis);
             let condition = self.parse_expression();
             self.expect_token(TokenKind::RightParenthesis);
             let true_branch = Box::new(self.parse_statement());
-            let false_branch = if let Some(_) = self.accept_token(TokenKind::Else) {
+            let false_branch = if self.accept_token(TokenKind::Else).is_some() {
                 Some(Box::new(self.parse_statement()))
             } else {
                 None
@@ -109,10 +109,10 @@ impl Parser<'_> {
             }
         } else if self.try_token(TokenKind::LeftBrace) {
             Statement::Compound(self.parse_compound())
-        } else if let Some(_) = self.accept_token(TokenKind::For) {
+        } else if self.accept_token(TokenKind::For).is_some() {
             self.expect_token(TokenKind::LeftParenthesis);
             // initializer
-            let initializer = if let Some(_) = self.accept_token(TokenKind::Semicolon) {
+            let initializer = if self.accept_token(TokenKind::Semicolon).is_some() {
                 None
             } else {
                 Some(Box::new(if self.try_token(TokenKind::Int) {
@@ -144,7 +144,7 @@ impl Parser<'_> {
                 body: Box::new(body),
                 modifier,
             }
-        } else if let Some(_) = self.accept_token(TokenKind::Do) {
+        } else if self.accept_token(TokenKind::Do).is_some() {
             let body = self.parse_statement();
             self.expect_token(TokenKind::While);
             self.expect_token(TokenKind::LeftParenthesis);
@@ -156,7 +156,7 @@ impl Parser<'_> {
                 body: Box::new(body),
                 modifier: None,
             }
-        } else if let Some(_) = self.accept_token(TokenKind::While) {
+        } else if self.accept_token(TokenKind::While).is_some() {
             self.expect_token(TokenKind::LeftParenthesis);
             let condition = self.parse_expression();
             self.expect_token(TokenKind::RightParenthesis);
@@ -167,10 +167,10 @@ impl Parser<'_> {
                 body: Box::new(body),
                 modifier: None,
             }
-        } else if let Some(_) = self.accept_token(TokenKind::Break) {
+        } else if self.accept_token(TokenKind::Break).is_some() {
             self.expect_token(TokenKind::Semicolon);
             Statement::Break
-        } else if let Some(_) = self.accept_token(TokenKind::Continue) {
+        } else if self.accept_token(TokenKind::Continue).is_some() {
             self.expect_token(TokenKind::Semicolon);
             Statement::Continue
         } else {
@@ -185,7 +185,7 @@ impl Parser<'_> {
         let ans = Declaration {
             r#type: Type { level: 0 },
             name: self.expect_token(TokenKind::Identifier).text,
-            default: if let Some(_) = self.accept_token(TokenKind::Assign) {
+            default: if self.accept_token(TokenKind::Assign).is_some() {
                 Some(self.parse_expression())
             } else {
                 None
@@ -225,7 +225,7 @@ impl Parser<'_> {
 
     fn parse_ternary(&mut self) -> Expression {
         let condition = self.parse_logical_or();
-        if let Some(_) = self.accept_token(TokenKind::Question) {
+        if self.accept_token(TokenKind::Question).is_some() {
             let true_part = self.parse_expression();
             self.expect_token(TokenKind::Colon);
             let false_part = self.parse_ternary();
@@ -242,7 +242,7 @@ impl Parser<'_> {
     fn parse_logical_or(&mut self) -> Expression {
         let mut expr = self.parse_logical_and();
         loop {
-            if let Some(_) = self.accept_token(TokenKind::LogicalOr) {
+            if self.accept_token(TokenKind::LogicalOr).is_some() {
                 expr = Expression::LogicalOr(Box::new(expr), Box::new(self.parse_logical_and()));
             } else {
                 break expr;
@@ -253,7 +253,7 @@ impl Parser<'_> {
     fn parse_logical_and(&mut self) -> Expression {
         let mut expr = self.parse_equality();
         loop {
-            if let Some(_) = self.accept_token(TokenKind::LogicalAnd) {
+            if self.accept_token(TokenKind::LogicalAnd).is_some() {
                 expr = Expression::LogicalAnd(Box::new(expr), Box::new(self.parse_equality()));
             } else {
                 break expr;
@@ -264,9 +264,9 @@ impl Parser<'_> {
     fn parse_equality(&mut self) -> Expression {
         let mut expr = self.parse_relational();
         loop {
-            if let Some(_) = self.accept_token(TokenKind::Equal) {
+            if self.accept_token(TokenKind::Equal).is_some() {
                 expr = Expression::Equal(Box::new(expr), Box::new(self.parse_relational()));
-            } else if let Some(_) = self.accept_token(TokenKind::Unequal) {
+            } else if self.accept_token(TokenKind::Unequal).is_some() {
                 expr = Expression::Unequal(Box::new(expr), Box::new(self.parse_relational()));
             } else {
                 break expr;
@@ -277,13 +277,13 @@ impl Parser<'_> {
     fn parse_relational(&mut self) -> Expression {
         let mut expr = self.parse_additive();
         loop {
-            if let Some(_) = self.accept_token(TokenKind::Less) {
+            if self.accept_token(TokenKind::Less).is_some() {
                 expr = Expression::Less(Box::new(expr), Box::new(self.parse_additive()));
-            } else if let Some(_) = self.accept_token(TokenKind::LessEqual) {
+            } else if self.accept_token(TokenKind::LessEqual).is_some() {
                 expr = Expression::LessEqual(Box::new(expr), Box::new(self.parse_additive()));
-            } else if let Some(_) = self.accept_token(TokenKind::Greater) {
+            } else if self.accept_token(TokenKind::Greater).is_some() {
                 expr = Expression::Greater(Box::new(expr), Box::new(self.parse_additive()));
-            } else if let Some(_) = self.accept_token(TokenKind::GreaterEqual) {
+            } else if self.accept_token(TokenKind::GreaterEqual).is_some() {
                 expr = Expression::GreaterEqual(Box::new(expr), Box::new(self.parse_additive()));
             } else {
                 break expr;
@@ -294,9 +294,9 @@ impl Parser<'_> {
     fn parse_additive(&mut self) -> Expression {
         let mut expr = self.parse_multiplicative();
         loop {
-            if let Some(_) = self.accept_token(TokenKind::Plus) {
+            if self.accept_token(TokenKind::Plus).is_some() {
                 expr = Expression::Addition(Box::new(expr), Box::new(self.parse_multiplicative()));
-            } else if let Some(_) = self.accept_token(TokenKind::Hyphen) {
+            } else if self.accept_token(TokenKind::Hyphen).is_some() {
                 expr =
                     Expression::Subtraction(Box::new(expr), Box::new(self.parse_multiplicative()));
             } else {
@@ -308,11 +308,11 @@ impl Parser<'_> {
     fn parse_multiplicative(&mut self) -> Expression {
         let mut expr = self.parse_unary();
         loop {
-            if let Some(_) = self.accept_token(TokenKind::Asterisk) {
+            if self.accept_token(TokenKind::Asterisk).is_some() {
                 expr = Expression::Multiplication(Box::new(expr), Box::new(self.parse_unary()));
-            } else if let Some(_) = self.accept_token(TokenKind::Slash) {
+            } else if self.accept_token(TokenKind::Slash).is_some() {
                 expr = Expression::Division(Box::new(expr), Box::new(self.parse_unary()));
-            } else if let Some(_) = self.accept_token(TokenKind::Percentage) {
+            } else if self.accept_token(TokenKind::Percentage).is_some() {
                 expr = Expression::Modulus(Box::new(expr), Box::new(self.parse_unary()));
             } else {
                 break expr;
@@ -321,11 +321,11 @@ impl Parser<'_> {
     }
 
     fn parse_unary(&mut self) -> Expression {
-        if let Some(_) = self.accept_token(TokenKind::Hyphen) {
+        if self.accept_token(TokenKind::Hyphen).is_some() {
             Expression::Negation(Box::new(self.parse_unary()))
-        } else if let Some(_) = self.accept_token(TokenKind::Not) {
+        } else if self.accept_token(TokenKind::Not).is_some() {
             Expression::Not(Box::new(self.parse_unary()))
-        } else if let Some(_) = self.accept_token(TokenKind::LogicalNot) {
+        } else if self.accept_token(TokenKind::LogicalNot).is_some() {
             Expression::LogicalNot(Box::new(self.parse_unary()))
         } else {
             self.parse_postfix()
@@ -346,7 +346,7 @@ impl Parser<'_> {
     }
 
     fn parse_primary(&mut self) -> Expression {
-        if let Some(_) = self.accept_token(TokenKind::LeftParenthesis) {
+        if self.accept_token(TokenKind::LeftParenthesis).is_some() {
             let expression = self.parse_expression();
             self.expect_token(TokenKind::RightParenthesis);
             expression
