@@ -27,7 +27,7 @@ impl<T: Write> Ast<T> for Program {
 pub struct Function {
     pub r#type: Type,
     pub name: String,
-    pub body: Vec<BlockItem>,
+    pub body: Compound,
 }
 
 impl<T: Write> Ast<T> for Function {
@@ -35,11 +35,7 @@ impl<T: Write> Ast<T> for Function {
         context.enter_function(&self.name);
         context.put_set_frame(self.name.clone());
         context.enter_scope();
-
-        for asm in self.body.iter() {
-            asm.emit(context);
-        }
-
+        self.body.emit(context);
         if self.name == "main" {
             // default return for 'main' function
             context.put_push(0);
@@ -61,6 +57,7 @@ pub enum Statement {
         true_branch: Box<Statement>,
         false_branch: Option<Box<Statement>>,
     },
+    Compound(Compound),
 }
 
 impl<T: Write> Ast<T> for Statement {
@@ -102,7 +99,25 @@ impl<T: Write> Ast<T> for Statement {
                     context.put_label(label);
                 }
             }
+            Statement::Compound(compound) => {
+                compound.emit(context);
+            }
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Compound {
+    pub items: Vec<BlockItem>,
+}
+
+impl<T: Write> Ast<T> for Compound {
+    fn emit(&self, context: &mut Context<T>) {
+        context.enter_scope();
+        for item in self.items.iter() {
+            item.emit(context);
+        }
+        context.leave_scope();
     }
 }
 

@@ -29,12 +29,20 @@ impl Parser<'_> {
         let name = self.expect_token(TokenKind::Identifier).text;
         self.expect_token(TokenKind::LeftParenthesis);
         self.expect_token(TokenKind::RightParenthesis);
-        self.expect_token(TokenKind::LeftBrace);
-        let mut body = Vec::new();
-        while let None = self.accept_token(TokenKind::RightBrace) {
-            body.push(self.parse_block_item());
+        Function {
+            r#type,
+            name,
+            body: self.parse_compound(),
         }
-        Function { r#type, name, body }
+    }
+
+    fn parse_compound(&mut self) -> Compound {
+        self.expect_token(TokenKind::LeftBrace);
+        let mut items = Vec::new();
+        while let None = self.accept_token(TokenKind::RightBrace) {
+            items.push(self.parse_block_item());
+        }
+        Compound { items }
     }
 
     fn parse_statement(&mut self) -> Statement {
@@ -59,6 +67,8 @@ impl Parser<'_> {
                 true_branch,
                 false_branch,
             }
+        } else if self.try_token(TokenKind::LeftBrace) {
+            Statement::Compound(self.parse_compound())
         } else {
             let ans = Statement::Expression(self.parse_expression());
             self.expect_token(TokenKind::Semicolon);
