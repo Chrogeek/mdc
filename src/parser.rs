@@ -69,6 +69,70 @@ impl Parser<'_> {
             }
         } else if self.try_token(TokenKind::LeftBrace) {
             Statement::Compound(self.parse_compound())
+        } else if let Some(_) = self.accept_token(TokenKind::For) {
+            self.expect_token(TokenKind::LeftParenthesis);
+            // initializer
+            let initializer = if let Some(_) = self.accept_token(TokenKind::Semicolon) {
+                None
+            } else {
+                Some(Box::new(if self.try_token(TokenKind::Int) {
+                    BlockItem::Declaration(self.parse_declaration())
+                } else {
+                    let expression = self.parse_expression();
+                    self.expect_token(TokenKind::Semicolon);
+                    BlockItem::Statement(Statement::Expression(expression))
+                }))
+            };
+            // condition
+            let condition = if self.try_token(TokenKind::Semicolon) {
+                None
+            } else {
+                Some(self.parse_expression())
+            };
+            self.expect_token(TokenKind::Semicolon);
+            // modifier
+            let modifier = if self.try_token(TokenKind::RightParenthesis) {
+                None
+            } else {
+                Some(self.parse_expression())
+            };
+            self.expect_token(TokenKind::RightParenthesis);
+            let body = self.parse_statement();
+            Statement::Loop {
+                initializer,
+                condition,
+                body: Box::new(body),
+                modifier,
+            }
+        } else if let Some(_) = self.accept_token(TokenKind::Do) {
+            let body = self.parse_statement();
+            self.expect_token(TokenKind::While);
+            self.expect_token(TokenKind::LeftParenthesis);
+            let condition = self.parse_expression();
+            self.expect_token(TokenKind::RightParenthesis);
+            Statement::Loop {
+                initializer: None,
+                condition: Some(condition),
+                body: Box::new(body),
+                modifier: None,
+            }
+        } else if let Some(_) = self.accept_token(TokenKind::While) {
+            self.expect_token(TokenKind::LeftParenthesis);
+            let condition = self.parse_expression();
+            self.expect_token(TokenKind::RightParenthesis);
+            let body = self.parse_statement();
+            Statement::Loop {
+                initializer: None,
+                condition: Some(condition),
+                body: Box::new(body),
+                modifier: None,
+            }
+        } else if let Some(_) = self.accept_token(TokenKind::Break) {
+            self.expect_token(TokenKind::Semicolon);
+            Statement::Break
+        } else if let Some(_) = self.accept_token(TokenKind::Continue) {
+            self.expect_token(TokenKind::Semicolon);
+            Statement::Continue
         } else {
             let ans = Statement::Expression(self.parse_expression());
             self.expect_token(TokenKind::Semicolon);

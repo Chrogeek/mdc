@@ -54,14 +54,18 @@ impl Scope {
     }
 }
 
+pub struct Loop {
+    label_break: String,
+    label_continue: String,
+}
+
 pub struct Context<T: Write> {
     output: T,
-
     current_function: Option<String>,
     label_count: usize,
-
     offset: usize,
     scope_stack: Vec<Scope>,
+    loop_stack: Vec<Loop>,
 }
 
 impl<T: Write> Context<T> {
@@ -72,6 +76,7 @@ impl<T: Write> Context<T> {
             label_count: 0,
             offset: 0,
             scope_stack: Vec::new(),
+            loop_stack: Vec::new(),
         }
     }
 
@@ -82,6 +87,25 @@ impl<T: Write> Context<T> {
     pub fn leave_scope(&mut self) {
         self.offset = self.scope_stack.last().unwrap().start;
         self.scope_stack.pop();
+    }
+
+    pub fn enter_loop(&mut self, label_break: String, label_continue: String) {
+        self.loop_stack.push(Loop {
+            label_break,
+            label_continue,
+        });
+    }
+
+    pub fn leave_loop(&mut self) {
+        self.loop_stack.pop();
+    }
+
+    pub fn get_loop_break(&self) -> String {
+        self.loop_stack.last().unwrap().label_break.clone()
+    }
+
+    pub fn get_loop_continue(&self) -> String {
+        self.loop_stack.last().unwrap().label_continue.clone()
     }
 
     // Returns the address of created variable

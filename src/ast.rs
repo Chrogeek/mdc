@@ -58,6 +58,14 @@ pub enum Statement {
         false_branch: Option<Box<Statement>>,
     },
     Compound(Compound),
+    Loop {
+        initializer: Option<Box<BlockItem>>,
+        condition: Option<Expression>,
+        body: Box<Statement>,
+        modifier: Option<Expression>,
+    },
+    Break,
+    Continue,
 }
 
 impl<T: Write> Ast<T> for Statement {
@@ -101,6 +109,45 @@ impl<T: Write> Ast<T> for Statement {
             }
             Statement::Compound(compound) => {
                 compound.emit(context);
+            }
+            Statement::Loop {
+                initializer,
+                condition,
+                body,
+                modifier,
+            } => {
+                let label_restart = context.next_label();
+                let label_break = context.next_label();
+                let label_continue = context.next_label();
+
+                context.enter_loop(label_break.clone(), label_continue.clone());
+                context.enter_scope();
+                if let Some(item) = initializer {
+                    item.emit(context);
+                }
+                context.put_label(label_restart.clone());
+                if let Some(expression) = condition {
+                    expression.emit(context);
+                    context.put_jump_zero(label_break.clone());
+                }
+                context.enter_scope();
+                body.emit(context);
+                context.put_label(label_continue);
+                if let Some(expression) = modifier {
+                    expression.emit(context);
+                    context.put_pop();
+                }
+                context.leave_scope();
+                context.put_jump(label_restart);
+                context.put_label(label_break);
+                context.leave_scope();
+                context.leave_loop();
+            }
+            Statement::Break => {
+                context.put_jump(context.get_loop_break());
+            }
+            Statement::Continue => {
+                context.put_jump(context.get_loop_continue());
             }
         }
     }

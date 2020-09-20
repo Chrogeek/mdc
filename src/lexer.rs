@@ -23,6 +23,11 @@ impl<'a> Lexer<'a> {
             b"return" => TokenKind::Return,
             b"if" => TokenKind::If,
             b"else" => TokenKind::Else,
+            b"for" => TokenKind::For,
+            b"do" => TokenKind::Do,
+            b"while" => TokenKind::While,
+            b"break" => TokenKind::Break,
+            b"continue" => TokenKind::Continue,
             _ => TokenKind::Identifier,
         }
     }
