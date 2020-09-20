@@ -31,7 +31,8 @@ impl<T: Write> Ast<T> for Program {
 pub struct Function {
     pub r#type: Type,
     pub name: String,
-    pub body: Compound,
+    pub parameters: Vec<(String, Type)>,
+    pub body: Option<Compound>,
 }
 
 impl<T: Write> Ast<T> for Function {
@@ -39,12 +40,12 @@ impl<T: Write> Ast<T> for Function {
         context.enter_function(&self.name);
         context.put_set_frame(self.name.clone());
         context.enter_scope();
-        self.body.emit(context);
-        if self.name == "main" {
-            // default return for 'main' function
-            context.put_push(0);
-            context.put_return();
-        }
+        self.body.as_ref().and_then(|body| {
+            body.emit(context);
+            Some(())
+        });
+        context.put_push(0);
+        context.put_return(); // default return value: 0
         context.leave_scope();
         context.exit_function();
         context.put_end_frame();
@@ -228,6 +229,7 @@ pub enum Expression {
     LogicalOr(Box<Expression>, Box<Expression>),
     Assignment(String, Box<Expression>),
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
+    FunctionCall(Vec<Expression>),
 }
 
 impl<T: Write> Ast<T> for Expression {
@@ -303,6 +305,7 @@ impl<T: Write> Ast<T> for Expression {
                 context.leave_scope();
                 context.put_label(label_2);
             }
+            Expression::FunctionCall(_) => {}
         }
     }
 }

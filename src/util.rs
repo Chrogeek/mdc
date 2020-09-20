@@ -30,6 +30,7 @@ pub enum TokenKind {
     LogicalOr,
     Question,
     Colon,
+    Comma,
     // Keywords
     Int,
     Return,

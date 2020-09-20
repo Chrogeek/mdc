@@ -36,7 +36,7 @@ impl Scope {
 
     pub fn create_variable(&mut self, name: &String, r#type: &Type) {
         assert!(!self.variables.contains_key(name));
-        self.offset += r#type.measure();
+        self.offset -= r#type.measure();
         self.variables.insert(
             name.clone(),
             Variable {
@@ -152,7 +152,7 @@ impl<T: Write> Context<T> {
     }
 
     pub fn put_push(&mut self, value: i32) {
-        self.offset += 4;
+        self.offset -= 4;
         assembly!(
             self,
             "addi sp, sp, -4",
@@ -162,12 +162,12 @@ impl<T: Write> Context<T> {
     }
 
     pub fn put_pop(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         assembly!(self, "addi sp, sp, 4")
     }
 
     pub fn put_return(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         assembly!(
             self,
             "lw a0, 0(sp)",
@@ -192,67 +192,67 @@ impl<T: Write> Context<T> {
     }
 
     pub fn put_add(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "add t1, t1, t2")
     }
 
     pub fn put_subtract(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "sub t1, t1, t2")
     }
 
     pub fn put_multiply(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "mul t1, t1, t2")
     }
 
     pub fn put_divide(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "div t1, t1, t2")
     }
 
     pub fn put_modulo(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "rem t1, t1, t2")
     }
 
     pub fn put_equal(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "sub t1, t1, t2", "seqz t1, t1")
     }
 
     pub fn put_unequal(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "sub t1, t1, t2", "snez t1, t1")
     }
 
     pub fn put_less(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "slt t1, t1, t2")
     }
 
     pub fn put_less_equal(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "slt t1, t2, t1", "seqz t1, t1")
     }
 
     pub fn put_greater(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "slt t1, t2, t1")
     }
 
     pub fn put_greater_equal(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "slt t1, t1, t2", "seqz t1, t1")
     }
 
     pub fn put_logical_and(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "snez t1, t1", "snez t2, t2", "and t1, t1, t2")
     }
 
     pub fn put_logical_or(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         binary_operator_assembly!(self, "or t1, t1, t2", "snez t1, t1")
     }
 
@@ -261,7 +261,7 @@ impl<T: Write> Context<T> {
     }
 
     pub fn put_store(&mut self) {
-        self.offset -= 4;
+        self.offset += 4;
         assembly!(
             self,
             "lw t1, 4(sp)",
@@ -272,16 +272,16 @@ impl<T: Write> Context<T> {
     }
 
     pub fn put_allocate(&mut self, size: i32) {
-        self.offset += size;
+        self.offset -= size;
         assembly!(self, &format!("addi sp, sp, -{}", size))
     }
 
     pub fn put_locate(&mut self, position: i32) {
-        self.offset += 4;
+        self.offset -= 4;
         assembly!(
             self,
             "addi sp, sp, -4",
-            &format!("addi t1, fp, -{}", position),
+            &format!("addi t1, fp, {}", position),
             "sw t1, 0(sp)"
         )
     }
@@ -311,7 +311,7 @@ impl<T: Write> Context<T> {
     }
 
     pub fn put_jump_zero(&mut self, label: String) {
-        self.offset -= 4;
+        self.offset += 4;
         assembly!(
             self,
             "lw t1, 0(sp)",

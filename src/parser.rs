@@ -30,15 +30,49 @@ impl Parser<'_> {
         Type { level: 1 }
     }
 
+    fn parse_parameter_list(&mut self) -> Vec<(String, Type)> {
+        let mut ans = Vec::new();
+        if !self.try_token(TokenKind::RightParenthesis) {
+            loop {
+                let r#type = self.parse_type();
+                let name = self.expect_token(TokenKind::Identifier).text;
+                ans.push((name, r#type));
+                if self.accept_token(TokenKind::Comma).is_none() {
+                    break;
+                }
+            }
+        }
+        ans
+    }
+
+    fn parse_argument_list(&mut self) -> Vec<Expression> {
+        let mut ans = Vec::new();
+        if !self.try_token(TokenKind::RightParenthesis) {
+            loop {
+                ans.push(self.parse_expression());
+                if self.accept_token(TokenKind::Comma).is_none() {
+                    break;
+                }
+            }
+        }
+        ans
+    }
+
     fn parse_function(&mut self) -> Function {
         let r#type = self.parse_type();
         let name = self.expect_token(TokenKind::Identifier).text;
         self.expect_token(TokenKind::LeftParenthesis);
+        let parameters = self.parse_parameter_list();
         self.expect_token(TokenKind::RightParenthesis);
         Function {
             r#type,
             name,
-            body: self.parse_compound(),
+            parameters,
+            body: if let Some(_) = self.accept_token(TokenKind::Semicolon) {
+                None
+            } else {
+                Some(self.parse_compound())
+            },
         }
     }
 
@@ -293,6 +327,19 @@ impl Parser<'_> {
             Expression::Not(Box::new(self.parse_unary()))
         } else if let Some(_) = self.accept_token(TokenKind::LogicalNot) {
             Expression::LogicalNot(Box::new(self.parse_unary()))
+        } else {
+            self.parse_postfix()
+        }
+    }
+
+    fn parse_postfix(&mut self) -> Expression {
+        if let Some(token) = self.accept_token(TokenKind::Identifier) {
+            if self.accept_token(TokenKind::LeftParenthesis).is_some() {
+                Expression::FunctionCall(self.parse_argument_list())
+            } else {
+                self.lexer.unget_token(token);
+                self.parse_primary()
+            }
         } else {
             self.parse_primary()
         }

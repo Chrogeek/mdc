@@ -159,6 +159,7 @@ impl<'a> Lexer<'a> {
                 b'|' => make_double_symbol_match_arm!(b'|', Or, LogicalOr),
                 b'?' => make_single_symbol_match_arm!(Question),
                 b':' => make_single_symbol_match_arm!(Colon),
+                b',' => make_single_symbol_match_arm!(Comma),
                 _ => panic!(),
             }
         }
