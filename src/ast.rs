@@ -34,6 +34,7 @@ impl<T: Write> Ast<T> for Function {
     fn emit(&self, context: &mut Context<T>) {
         context.enter_function(&self.name);
         context.put_set_frame(self.name.clone());
+        context.enter_scope();
 
         for asm in self.body.iter() {
             asm.emit(context);
@@ -44,6 +45,7 @@ impl<T: Write> Ast<T> for Function {
             context.put_push(0);
             context.put_return();
         }
+        context.leave_scope();
         context.exit_function();
         context.put_end_frame();
     }
@@ -83,10 +85,14 @@ impl<T: Write> Ast<T> for Statement {
                     let label_2 = context.next_label();
                     condition.emit(context);
                     context.put_jump_zero(label_1.clone());
+                    context.enter_scope();
                     true_branch.emit(context);
+                    context.leave_scope();
                     context.put_jump(label_2.clone());
                     context.put_label(label_1);
+                    context.enter_scope();
                     false_part.emit(context);
+                    context.leave_scope();
                     context.put_label(label_2);
                 } else {
                     let label = context.next_label();
@@ -109,10 +115,10 @@ pub struct Declaration {
 
 impl<T: Write> Ast<T> for Declaration {
     fn emit(&self, context: &mut Context<T>) {
-        context.create_variable(&self.r#type, &self.name);
+        let address = context.create_variable(&self.name, &self.r#type);
         if let Some(expression) = &self.default {
             expression.emit(context);
-            context.put_locate(self.name.clone());
+            context.put_locate(address);
             context.put_store();
             context.put_pop();
         }
@@ -221,10 +227,14 @@ impl<T: Write> Ast<T> for Expression {
                 let label_2 = context.next_label();
                 condition.emit(context);
                 context.put_jump_zero(label_1.clone());
+                context.enter_scope();
                 true_part.emit(context);
+                context.leave_scope();
                 context.put_jump(label_2.clone());
                 context.put_label(label_1);
+                context.enter_scope();
                 false_part.emit(context);
+                context.leave_scope();
                 context.put_label(label_2);
             }
         }

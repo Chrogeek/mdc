@@ -1,6 +1,5 @@
 use crate::util::*;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::io::Write;
 
 macro_rules! assembly {
@@ -20,43 +19,89 @@ macro_rules! binary_operator_assembly {
     };
 }
 
+pub struct Scope {
+    start: usize,                         // staring memory location of this scope
+    offset: usize,                        // current memory location of this scope
+    variables: HashMap<String, Variable>, // map from variable name to memory location
+}
+
+impl Scope {
+    pub fn new(offset: usize) -> Scope {
+        Scope {
+            start: offset,
+            offset,
+            variables: HashMap::new(),
+        }
+    }
+
+    pub fn create_variable(&mut self, name: &String, r#type: &Type) {
+        if self.variables.contains_key(name) {
+            panic!("Redefinition of variable {}", name);
+        } else {
+            self.offset += r#type.measure();
+            self.variables.insert(
+                name.clone(),
+                Variable {
+                    r#type: r#type.clone(),
+                    offset: self.offset,
+                },
+            );
+        }
+    }
+
+    pub fn access_variable(&self, name: &String) -> Option<Variable> {
+        Some(self.variables.get(name)?.clone())
+    }
+}
+
 pub struct Context<T: Write> {
     output: T,
 
-    variables: HashSet<String>,
     current_function: Option<String>,
     label_count: usize,
 
-    lookup: HashMap<String, usize>,
     offset: usize,
+    scope_stack: Vec<Scope>,
 }
 
 impl<T: Write> Context<T> {
     pub fn new(output: T) -> Context<T> {
         Context {
             output,
-            variables: HashSet::new(),
             current_function: None,
             label_count: 0,
-            lookup: HashMap::new(),
             offset: 0,
+            scope_stack: Vec::new(),
         }
     }
 
-    pub fn create_variable(&mut self, r#type: &Type, name: &String) {
-        if self.variables.insert(name.clone()) {
-            self.put_allocate(r#type.measure(), name.clone())
-        } else {
-            panic!("Redefinition of variable {}", name);
-        }
+    pub fn enter_scope(&mut self) {
+        self.scope_stack.push(Scope::new(self.offset));
+    }
+
+    pub fn leave_scope(&mut self) {
+        self.offset = self.scope_stack.last().unwrap().start;
+        self.scope_stack.pop();
+    }
+
+    // Returns the address of created variable
+    pub fn create_variable(&mut self, name: &String, r#type: &Type) -> usize {
+        self.scope_stack
+            .last_mut()
+            .unwrap()
+            .create_variable(name, r#type);
+        self.put_allocate(r#type.measure());
+        self.offset
     }
 
     pub fn access_variable(&mut self, name: &String) {
-        if self.variables.contains(name) {
-            self.put_locate(name.clone())
-        } else {
-            panic!("Undefined variable: {}", name);
+        for scope in self.scope_stack.iter().rev() {
+            if let Some(variable) = scope.access_variable(name) {
+                self.put_locate(variable.offset);
+                return;
+            }
         }
+        panic!("Undefined variable: {}", name);
     }
 
     pub fn enter_function(&mut self, function_name: &String) {
@@ -205,18 +250,17 @@ impl<T: Write> Context<T> {
         )
     }
 
-    pub fn put_allocate(&mut self, size: usize, name: String) {
+    pub fn put_allocate(&mut self, size: usize) {
         self.offset += size;
-        self.lookup.insert(name.clone(), self.offset);
         assembly!(self, &format!("addi sp, sp, -{}", size))
     }
 
-    pub fn put_locate(&mut self, name: String) {
+    pub fn put_locate(&mut self, position: usize) {
         self.offset += 4;
         assembly!(
             self,
             "addi sp, sp, -4",
-            &format!("addi t1, fp, -{}", self.lookup.get(&name).unwrap()),
+            &format!("addi t1, fp, -{}", position),
             "sw t1, 0(sp)"
         )
     }
