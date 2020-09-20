@@ -16,13 +16,14 @@ impl<T: Write> Ast<T> for Program {
         let mut entry = false;
         context.put_directive(".text");
         context.put_directive(".globl main");
-        context.put_directive("main:");
         for function in self.functions.iter() {
             function.emit(context);
             if function.name == "main" {
                 entry = true;
             }
         }
+        context.put_label("main".to_string());
+        context.put_jump("__main".to_string());
         assert!(entry);
     }
 }
