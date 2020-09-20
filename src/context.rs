@@ -20,13 +20,13 @@ macro_rules! binary_operator_assembly {
 }
 
 pub struct Scope {
-    start: usize,                         // staring memory location of this scope
-    offset: usize,                        // current memory location of this scope
+    start: i32,                           // staring memory location of this scope
+    offset: i32,                          // current memory location of this scope
     variables: HashMap<String, Variable>, // map from variable name to memory location
 }
 
 impl Scope {
-    pub fn new(offset: usize) -> Scope {
+    pub fn new(offset: i32) -> Scope {
         Scope {
             start: offset,
             offset,
@@ -35,18 +35,15 @@ impl Scope {
     }
 
     pub fn create_variable(&mut self, name: &String, r#type: &Type) {
-        if self.variables.contains_key(name) {
-            panic!("Redefinition of variable {}", name);
-        } else {
-            self.offset += r#type.measure();
-            self.variables.insert(
-                name.clone(),
-                Variable {
-                    r#type: r#type.clone(),
-                    offset: self.offset,
-                },
-            );
-        }
+        assert!(!self.variables.contains_key(name));
+        self.offset += r#type.measure();
+        self.variables.insert(
+            name.clone(),
+            Variable {
+                r#type: r#type.clone(),
+                offset: self.offset,
+            },
+        );
     }
 
     pub fn access_variable(&self, name: &String) -> Option<Variable> {
@@ -62,8 +59,8 @@ pub struct Loop {
 pub struct Context<T: Write> {
     output: T,
     current_function: Option<String>,
-    label_count: usize,
-    offset: usize,
+    label_count: i32,
+    offset: i32,
     scope_stack: Vec<Scope>,
     loop_stack: Vec<Loop>,
 }
@@ -109,7 +106,7 @@ impl<T: Write> Context<T> {
     }
 
     // Returns the address of created variable
-    pub fn create_variable(&mut self, name: &String, r#type: &Type) -> usize {
+    pub fn create_variable(&mut self, name: &String, r#type: &Type) -> i32 {
         self.scope_stack
             .last_mut()
             .unwrap()
@@ -125,7 +122,7 @@ impl<T: Write> Context<T> {
                 return;
             }
         }
-        panic!("Undefined variable: {}", name);
+        panic!();
     }
 
     pub fn enter_function(&mut self, function_name: &String) {
@@ -274,12 +271,12 @@ impl<T: Write> Context<T> {
         )
     }
 
-    pub fn put_allocate(&mut self, size: usize) {
+    pub fn put_allocate(&mut self, size: i32) {
         self.offset += size;
         assembly!(self, &format!("addi sp, sp, -{}", size))
     }
 
-    pub fn put_locate(&mut self, position: usize) {
+    pub fn put_locate(&mut self, position: i32) {
         self.offset += 4;
         assembly!(
             self,

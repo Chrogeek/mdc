@@ -2,8 +2,6 @@ use crate::util::*;
 
 pub struct Lexer<'a> {
     source: &'a [u8],
-    pub row: usize,
-    pub col: usize,
     ungot_tokens: Vec<Token>,
 }
 
@@ -11,8 +9,6 @@ impl<'a> Lexer<'a> {
     pub fn new(source: &'a [u8]) -> Lexer {
         Lexer {
             source,
-            row: 0,
-            col: 0,
             ungot_tokens: Vec::new(),
         }
     }
@@ -47,14 +43,11 @@ impl<'a> Lexer<'a> {
     fn get_token(&mut self) -> Token {
         macro_rules! make_single_symbol_match_arm {
             ($target: ident) => {{
-                self.col += 1;
                 let (token, remaining) = self.source.split_at(1);
                 self.source = remaining;
                 Token {
                     kind: TokenKind::$target,
                     text: String::from_utf8_lossy(token).to_string(),
-                    row: self.row,
-                    col: self.col - 1,
                 }
             }};
         }
@@ -62,24 +55,18 @@ impl<'a> Lexer<'a> {
         macro_rules! make_double_symbol_match_arm {
             ($second: expr, $target1: ident, $target2: ident) => {{
                 if self.source.len() < 2 || self.source[1] != $second {
-                    self.col += 1;
                     let (token, remaining) = self.source.split_at(1);
                     self.source = remaining;
                     Token {
                         kind: TokenKind::$target1,
                         text: String::from_utf8_lossy(token).to_string(),
-                        row: self.row,
-                        col: self.col - 1,
                     }
                 } else {
-                    self.col += 2;
                     let (token, remaining) = self.source.split_at(2);
                     self.source = remaining;
                     Token {
                         kind: TokenKind::$target2,
                         text: String::from_utf8_lossy(token).to_string(),
-                        row: self.row,
-                        col: self.col - 2,
                     }
                 }
             }};
@@ -90,12 +77,9 @@ impl<'a> Lexer<'a> {
             match self.source[offset] {
                 b' ' | b'\r' | b'\t' => {
                     offset += 1;
-                    self.col += 1;
                 }
                 b'\n' => {
                     offset += 1;
-                    self.row += 1;
-                    self.col = 0;
                 }
                 _ => break,
             };
@@ -107,35 +91,27 @@ impl<'a> Lexer<'a> {
             Token {
                 kind: TokenKind::Eof,
                 text: "".to_string(),
-                row: self.row,
-                col: self.col,
             }
         } else {
             match self.source[0] {
                 b'0'..=b'9' => loop {
                     // Integer literals
                     if offset >= self.source.len() {
-                        self.col += offset;
                         let (token, remaining) = self.source.split_at(offset);
                         self.source = remaining;
                         break Token {
                             kind: TokenKind::Integer,
                             text: String::from_utf8_lossy(token).to_string(),
-                            row: self.row,
-                            col: self.col - offset,
                         };
                     }
                     match self.source[offset] {
                         b'0'..=b'9' => offset += 1,
                         _ => {
-                            self.col += offset;
                             let (token, remaining) = self.source.split_at(offset);
                             self.source = remaining;
                             break Token {
                                 kind: TokenKind::Integer,
                                 text: String::from_utf8_lossy(token).to_string(),
-                                row: self.row,
-                                col: self.col - offset,
                             };
                         }
                     }
@@ -143,14 +119,11 @@ impl<'a> Lexer<'a> {
                 b'A'..=b'Z' | b'a'..=b'z' | b'_' => loop {
                     // Identifiers & keywords
                     if offset >= self.source.len() {
-                        self.col += offset;
                         let (token, remaining) = self.source.split_at(offset);
                         self.source = remaining;
                         break Token {
                             kind: Self::recognize_keyword(self.source),
                             text: String::from_utf8_lossy(token).to_string(),
-                            row: self.row,
-                            col: self.col - offset,
                         };
                     }
                     match self.source[offset] {
@@ -158,14 +131,11 @@ impl<'a> Lexer<'a> {
                             offset += 1;
                         }
                         _ => {
-                            self.col += offset;
                             let (token, remaining) = self.source.split_at(offset);
                             self.source = remaining;
                             break Token {
                                 kind: Self::recognize_keyword(token),
                                 text: String::from_utf8_lossy(token).to_string(),
-                                row: self.row,
-                                col: self.col - offset,
                             };
                         }
                     }
@@ -189,10 +159,7 @@ impl<'a> Lexer<'a> {
                 b'|' => make_double_symbol_match_arm!(b'|', Or, LogicalOr),
                 b'?' => make_single_symbol_match_arm!(Question),
                 b':' => make_single_symbol_match_arm!(Colon),
-                _ => panic!(
-                    "Line {}, column {}: Unknown symbol '{}'",
-                    self.row, self.col, self.source[0]
-                ),
+                _ => panic!(),
             }
         }
     }

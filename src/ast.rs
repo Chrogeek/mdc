@@ -8,18 +8,22 @@ pub trait Ast<T: Write> {
 
 #[derive(Debug)]
 pub struct Program {
-    pub function: Function,
+    pub functions: Vec<Function>,
 }
 
 impl<T: Write> Ast<T> for Program {
     fn emit(&self, context: &mut Context<T>) {
-        if self.function.name != "main" {
-            panic!("No entry point 'main' defined");
-        }
+        let mut entry = false;
         context.put_directive(".text");
         context.put_directive(".globl main");
         context.put_directive("main:");
-        self.function.emit(context);
+        for function in self.functions.iter() {
+            function.emit(context);
+            if function.name == "main" {
+                entry = true;
+            }
+        }
+        assert!(entry);
     }
 }
 

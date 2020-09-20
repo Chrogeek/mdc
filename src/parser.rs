@@ -14,9 +14,15 @@ impl Parser<'_> {
     }
 
     pub fn parse_program(&mut self) -> Program {
-        let function = self.parse_function();
+        let functions = {
+            let mut list = Vec::new();
+            while !self.try_token(TokenKind::Eof) {
+                list.push(self.parse_function());
+            }
+            list
+        };
         self.expect_token(TokenKind::Eof);
-        Program { function }
+        Program { functions }
     }
 
     fn parse_type(&mut self) -> Type {
@@ -303,9 +309,7 @@ impl Parser<'_> {
         } else {
             let token = self.expect_token(TokenKind::Integer);
             let value = token.text;
-            let value = value // Should not invoke any error
-                .parse()
-                .expect(&format!("Cannot cast '{}' to an 'int' literal", value));
+            let value = value.parse().unwrap(); // Should not invoke any error
             Expression::IntegerLiteral(value)
         }
     }
@@ -325,11 +329,7 @@ impl Parser<'_> {
     // Expects the next token to be with the specified kind, panics if fails.
     fn expect_token(&mut self, kind: TokenKind) -> Token {
         let token = self.lexer.fetch_token();
-        assert_eq!(
-            token.kind, kind,
-            "Line {}, column {}: Expected {:?}, got {:?}",
-            self.lexer.row, self.lexer.col, kind, token.kind
-        );
+        assert_eq!(token.kind, kind);
         token
     }
 

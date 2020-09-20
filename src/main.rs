@@ -9,10 +9,8 @@ use crate::context::Context;
 use crate::parser::Parser;
 
 fn main() {
-    let file = std::env::args()
-        .nth(1)
-        .expect("Usage: minidecaf <source file>");
-    let input = std::fs::read(&file).expect(&format!("Unable to read input source file {}", &file));
+    let file = std::env::args().nth(1).unwrap();
+    let input = std::fs::read(&file).unwrap();
     let mut output = Vec::<u8>::new();
     let mut context = Context::new(&mut output);
     Parser::new(input.as_slice())
