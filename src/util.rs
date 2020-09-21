@@ -56,11 +56,7 @@ pub struct Type {
 
 impl Type {
     pub fn measure(&self) -> i32 {
-        if self.level == 0 {
-            4
-        } else {
-            8
-        }
+        4
     }
 }
 
