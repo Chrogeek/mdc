@@ -43,7 +43,7 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Program {
                             context.write_data(".align 4");
                             context.write_data(&format!(".size {}, 4", mangled));
                             context.write_data(&format!("{}:", mangled));
-                            if let Expression::IntegerLiteral(value) = expression {
+                            if let ExpressionKind::IntegerLiteral(value) = expression.kind {
                                 context.write_data(&format!(".word {}", value));
                             } else {
                                 panic!();
@@ -270,7 +270,7 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for BlockItem {
 }
 
 #[derive(Debug)]
-pub enum Expression {
+pub enum ExpressionKind {
     IntegerLiteral(i32),
     Identifier(String),
     Negation(Box<Expression>),
@@ -294,6 +294,12 @@ pub enum Expression {
     FunctionCall(String, Vec<Expression>),
 }
 
+#[derive(Debug)]
+pub struct Expression {
+    pub kind: ExpressionKind,
+    pub is_lvalue: bool,
+}
+
 impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Expression {
     fn emit(&self, context: &mut Context<T, U, V>) {
         macro_rules! make_binary_operator_visitor {
@@ -304,55 +310,63 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Expression {
             }};
         }
 
-        match self {
-            Expression::IntegerLiteral(value) => context.put_push(*value),
-            Expression::Identifier(name) => {
+        match &self.kind {
+            ExpressionKind::IntegerLiteral(value) => context.put_push(*value),
+            ExpressionKind::Identifier(name) => {
                 context.access_variable(name);
                 context.put_load();
             }
-            Expression::Negation(rhs) => {
+            ExpressionKind::Negation(rhs) => {
                 rhs.emit(context);
                 context.put_negate();
             }
-            Expression::Not(rhs) => {
+            ExpressionKind::Not(rhs) => {
                 rhs.emit(context);
                 context.put_not();
             }
-            Expression::LogicalNot(rhs) => {
+            ExpressionKind::LogicalNot(rhs) => {
                 rhs.emit(context);
                 context.put_logical_not();
             }
-            Expression::Addition(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_add),
-            Expression::Subtraction(lhs, rhs) => {
+            ExpressionKind::Addition(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_add),
+            ExpressionKind::Subtraction(lhs, rhs) => {
                 make_binary_operator_visitor!(lhs, rhs, put_subtract)
             }
-            Expression::Multiplication(lhs, rhs) => {
+            ExpressionKind::Multiplication(lhs, rhs) => {
                 make_binary_operator_visitor!(lhs, rhs, put_multiply)
             }
-            Expression::Division(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_divide),
-            Expression::Modulus(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_modulo),
-            Expression::Equal(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_equal),
-            Expression::Unequal(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_unequal),
-            Expression::Less(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_less),
-            Expression::LessEqual(lhs, rhs) => {
+            ExpressionKind::Division(lhs, rhs) => {
+                make_binary_operator_visitor!(lhs, rhs, put_divide)
+            }
+            ExpressionKind::Modulus(lhs, rhs) => {
+                make_binary_operator_visitor!(lhs, rhs, put_modulo)
+            }
+            ExpressionKind::Equal(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_equal),
+            ExpressionKind::Unequal(lhs, rhs) => {
+                make_binary_operator_visitor!(lhs, rhs, put_unequal)
+            }
+            ExpressionKind::Less(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_less),
+            ExpressionKind::LessEqual(lhs, rhs) => {
                 make_binary_operator_visitor!(lhs, rhs, put_less_equal)
             }
-            Expression::Greater(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_greater),
-            Expression::GreaterEqual(lhs, rhs) => {
+            ExpressionKind::Greater(lhs, rhs) => {
+                make_binary_operator_visitor!(lhs, rhs, put_greater)
+            }
+            ExpressionKind::GreaterEqual(lhs, rhs) => {
                 make_binary_operator_visitor!(lhs, rhs, put_greater_equal)
             }
-            Expression::LogicalAnd(lhs, rhs) => {
+            ExpressionKind::LogicalAnd(lhs, rhs) => {
                 make_binary_operator_visitor!(lhs, rhs, put_logical_and)
             }
-            Expression::LogicalOr(lhs, rhs) => {
+            ExpressionKind::LogicalOr(lhs, rhs) => {
                 make_binary_operator_visitor!(lhs, rhs, put_logical_or)
             }
-            Expression::Assignment(lhs, rhs) => {
+            ExpressionKind::Assignment(lhs, rhs) => {
                 rhs.emit(context);
                 context.access_variable(lhs);
                 context.put_store();
             }
-            Expression::Ternary(condition, true_part, false_part) => {
+            ExpressionKind::Ternary(condition, true_part, false_part) => {
                 let label_1 = context.next_label();
                 let label_2 = context.next_label();
                 condition.emit(context);
@@ -367,7 +381,7 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Expression {
                 context.leave_scope();
                 context.put_label(label_2);
             }
-            Expression::FunctionCall(name, arguments) => {
+            ExpressionKind::FunctionCall(name, arguments) => {
                 context.check_arguments(name, arguments);
                 for argument in arguments.iter().rev() {
                     argument.emit(context);

@@ -260,6 +260,9 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
             arguments.len(),
             self.function_table.get(name).unwrap().parameters.len()
         );
+        // for i in 0..arguments.len() {
+        // assert_eq!(self.function_table.get(name).unwrap().parameters[i] == arguments[i])
+        // }
     }
 
     pub fn next_label(&mut self) -> String {
