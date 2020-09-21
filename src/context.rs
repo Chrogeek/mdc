@@ -151,14 +151,19 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
             .is_none());
     }
 
-    pub fn access_global_variable(&mut self, name: &String) {
-        assert!(self.global_variables.get(name).is_some());
-        assembly!(
-            self,
-            "addi sp, sp, -4",
-            &format!("la t1, {}", mangle_global_variable(name)),
-            "sw t1, 0(sp)"
-        );
+    pub fn access_global_variable(&mut self, name: &String) -> Type {
+        if let Some(variable_type) = self.global_variables.get(name) {
+            self.offset -= 4;
+            assembly!(
+                self,
+                "addi sp, sp, -4",
+                &format!("la t1, {}", mangle_global_variable(name)),
+                "sw t1, 0(sp)"
+            );
+            variable_type.clone()
+        } else {
+            panic!();
+        }
     }
 
     // Returns the address of created variable
@@ -171,14 +176,14 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         self.offset
     }
 
-    pub fn access_variable(&mut self, name: &String) {
+    pub fn access_variable(&mut self, name: &String) -> Type {
         for scope in self.scope_stack.iter().rev() {
             if let Some(variable) = scope.access_variable(name) {
                 self.put_locate(variable.offset);
-                return;
+                return variable.r#type;
             }
         }
-        self.access_global_variable(name);
+        self.access_global_variable(name)
     }
 
     // Creates a variable with specified offset, used for arguments
@@ -247,6 +252,10 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         self.function_table.get_mut(name).unwrap().called = true;
     }
 
+    pub fn get_function_return_type(&self, name: &String) -> Type {
+        self.function_table.get(name).unwrap().return_type.clone()
+    }
+
     // Checks if there exists any called but undefined functions.
     // Declared, undefined while never called function primitives are not considered error.
     pub fn check_undefined_symbol(&self) {
@@ -255,14 +264,24 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         }
     }
 
-    pub fn check_arguments<W>(&self, name: &String, arguments: &Vec<W>) {
+    pub fn check_arguments(&self, name: &String, arguments: &Vec<Type>) {
         assert_eq!(
             arguments.len(),
             self.function_table.get(name).unwrap().parameters.len()
         );
-        // for i in 0..arguments.len() {
-        // assert_eq!(self.function_table.get(name).unwrap().parameters[i] == arguments[i])
-        // }
+        for i in 0..arguments.len() {
+            assert_eq!(
+                self.function_table.get(name).unwrap().parameters[i],
+                arguments[i]
+            );
+        }
+    }
+
+    pub fn check_return_type(&self, return_type: Type) {
+        assert_eq!(
+            return_type,
+            self.get_function_return_type(self.current_function.as_ref().unwrap())
+        );
     }
 
     pub fn next_label(&mut self) -> String {

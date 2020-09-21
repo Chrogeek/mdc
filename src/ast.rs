@@ -2,10 +2,6 @@ use crate::context::*;
 use crate::util::*;
 use std::io::Write;
 
-pub trait Ast<T: Write, U: Write, V: Write> {
-    fn emit(&self, context: &mut Context<T, U, V>);
-}
-
 #[derive(Debug)]
 pub enum ProgramItem {
     Function(Function),
@@ -17,8 +13,8 @@ pub struct Program {
     pub items: Vec<ProgramItem>,
 }
 
-impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Program {
-    fn emit(&self, context: &mut Context<T, U, V>) {
+impl Program {
+    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
         let mut entry = false;
         context.put_directive(".text");
         context.put_directive(".globl main");
@@ -68,8 +64,8 @@ pub struct Function {
     pub body: Option<Vec<BlockItem>>,
 }
 
-impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Function {
-    fn emit(&self, context: &mut Context<T, U, V>) {
+impl Function {
+    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
         self.body
             .as_ref()
             .and_then(|body| {
@@ -135,12 +131,13 @@ pub enum Statement {
     Continue,
 }
 
-impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Statement {
-    fn emit(&self, context: &mut Context<T, U, V>) {
+impl Statement {
+    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
         match self {
             Statement::Empty => {}
             Statement::Return(expression) => {
-                expression.emit(context);
+                let rt = expression.emit(context);
+                context.check_return_type(rt);
                 context.put_return();
             }
             Statement::Expression(expression) => {
@@ -155,7 +152,7 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Statement {
                 if let Some(false_part) = false_branch {
                     let label_1 = context.next_label();
                     let label_2 = context.next_label();
-                    condition.emit(context);
+                    assert!(condition.emit(context).is_value());
                     context.put_jump_zero(label_1.clone());
                     context.enter_scope();
                     true_branch.emit(context);
@@ -168,7 +165,7 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Statement {
                     context.put_label(label_2);
                 } else {
                     let label = context.next_label();
-                    condition.emit(context);
+                    assert!(condition.emit(context).is_value());
                     context.put_jump_zero(label.clone());
                     true_branch.emit(context);
                     context.put_label(label);
@@ -194,7 +191,7 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Statement {
                 }
                 context.put_label(label_restart.clone());
                 if let Some(expression) = condition {
-                    expression.emit(context);
+                    assert!(expression.emit(context).is_value());
                     context.put_jump_zero(label_break.clone());
                 }
                 context.enter_scope();
@@ -225,8 +222,8 @@ pub struct Compound {
     pub items: Vec<BlockItem>,
 }
 
-impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Compound {
-    fn emit(&self, context: &mut Context<T, U, V>) {
+impl Compound {
+    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
         context.enter_scope();
         for item in self.items.iter() {
             item.emit(context);
@@ -242,13 +239,21 @@ pub struct Declaration {
     pub default: Option<Expression>,
 }
 
-impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Declaration {
-    fn emit(&self, context: &mut Context<T, U, V>) {
-        let address = context.create_variable(&self.name, &self.r#type);
+impl Declaration {
+    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
+        context.create_variable(&self.name, &self.r#type);
         if let Some(expression) = &self.default {
-            expression.emit(context);
-            context.put_locate(address);
-            context.put_store();
+            Expression {
+                kind: ExpressionKind::Assignment(
+                    Box::new(Expression {
+                        kind: ExpressionKind::Identifier(self.name.clone()),
+                        is_lvalue: true,
+                    }),
+                    Box::new(expression.clone()),
+                ),
+                is_lvalue: false,
+            }
+            .emit(context);
             context.put_pop();
         }
     }
@@ -260,8 +265,8 @@ pub enum BlockItem {
     Declaration(Declaration),
 }
 
-impl<T: Write, U: Write, V: Write> Ast<T, U, V> for BlockItem {
-    fn emit(&self, context: &mut Context<T, U, V>) {
+impl BlockItem {
+    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
         match self {
             BlockItem::Statement(statement) => statement.emit(context),
             BlockItem::Declaration(declaration) => declaration.emit(context),
@@ -269,7 +274,7 @@ impl<T: Write, U: Write, V: Write> Ast<T, U, V> for BlockItem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExpressionKind {
     IntegerLiteral(i32),
     Identifier(String),
@@ -289,109 +294,173 @@ pub enum ExpressionKind {
     GreaterEqual(Box<Expression>, Box<Expression>),
     LogicalAnd(Box<Expression>, Box<Expression>),
     LogicalOr(Box<Expression>, Box<Expression>),
-    Assignment(String, Box<Expression>),
+    Assignment(Box<Expression>, Box<Expression>),
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
     FunctionCall(String, Vec<Expression>),
+    Reference(Box<Expression>),
+    Dereference(Box<Expression>),
+    Convert(Type, Box<Expression>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Expression {
     pub kind: ExpressionKind,
     pub is_lvalue: bool,
 }
 
-impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Expression {
-    fn emit(&self, context: &mut Context<T, U, V>) {
-        macro_rules! make_binary_operator_visitor {
+impl Expression {
+    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) -> Type {
+        macro_rules! make_binary_operator {
             ($lhs: ident, $rhs: ident, $instruction: ident) => {{
-                $lhs.emit(context);
-                $rhs.emit(context);
+                assert!($lhs.emit(context).is_value());
+                assert!($rhs.emit(context).is_value());
                 context.$instruction();
+                Type::make_value()
+            }};
+        }
+
+        macro_rules! make_binary_pointer_operator {
+            ($lhs: ident, $rhs: ident, $instruction: ident) => {{
+                let lt = $lhs.emit(context);
+                let rt = $rhs.emit(context);
+                assert_eq!(lt, rt);
+                context.$instruction();
+                Type::make_value()
             }};
         }
 
         match &self.kind {
-            ExpressionKind::IntegerLiteral(value) => context.put_push(*value),
+            ExpressionKind::IntegerLiteral(value) => {
+                context.put_push(*value);
+                Type::make_value()
+            }
             ExpressionKind::Identifier(name) => {
-                context.access_variable(name);
+                let rt = context.access_variable(name);
                 context.put_load();
+                rt
             }
             ExpressionKind::Negation(rhs) => {
-                rhs.emit(context);
+                assert!(rhs.emit(context).is_value());
                 context.put_negate();
+                Type::make_value()
             }
             ExpressionKind::Not(rhs) => {
-                rhs.emit(context);
+                assert!(rhs.emit(context).is_value());
                 context.put_not();
+                Type::make_value()
             }
             ExpressionKind::LogicalNot(rhs) => {
-                rhs.emit(context);
+                assert!(rhs.emit(context).is_value());
                 context.put_logical_not();
+                Type::make_value()
             }
-            ExpressionKind::Addition(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_add),
-            ExpressionKind::Subtraction(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_subtract)
-            }
+            ExpressionKind::Addition(lhs, rhs) => make_binary_operator!(lhs, rhs, put_add),
+            ExpressionKind::Subtraction(lhs, rhs) => make_binary_operator!(lhs, rhs, put_subtract),
             ExpressionKind::Multiplication(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_multiply)
+                make_binary_operator!(lhs, rhs, put_multiply)
             }
-            ExpressionKind::Division(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_divide)
-            }
-            ExpressionKind::Modulus(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_modulo)
-            }
-            ExpressionKind::Equal(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_equal),
+            ExpressionKind::Division(lhs, rhs) => make_binary_operator!(lhs, rhs, put_divide),
+            ExpressionKind::Modulus(lhs, rhs) => make_binary_operator!(lhs, rhs, put_modulo),
+            ExpressionKind::Equal(lhs, rhs) => make_binary_pointer_operator!(lhs, rhs, put_equal),
             ExpressionKind::Unequal(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_unequal)
+                make_binary_pointer_operator!(lhs, rhs, put_unequal)
             }
-            ExpressionKind::Less(lhs, rhs) => make_binary_operator_visitor!(lhs, rhs, put_less),
-            ExpressionKind::LessEqual(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_less_equal)
-            }
-            ExpressionKind::Greater(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_greater)
-            }
+            ExpressionKind::Less(lhs, rhs) => make_binary_operator!(lhs, rhs, put_less),
+            ExpressionKind::LessEqual(lhs, rhs) => make_binary_operator!(lhs, rhs, put_less_equal),
+            ExpressionKind::Greater(lhs, rhs) => make_binary_operator!(lhs, rhs, put_greater),
             ExpressionKind::GreaterEqual(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_greater_equal)
+                make_binary_operator!(lhs, rhs, put_greater_equal)
             }
             ExpressionKind::LogicalAnd(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_logical_and)
+                make_binary_operator!(lhs, rhs, put_logical_and)
             }
-            ExpressionKind::LogicalOr(lhs, rhs) => {
-                make_binary_operator_visitor!(lhs, rhs, put_logical_or)
-            }
+            ExpressionKind::LogicalOr(lhs, rhs) => make_binary_operator!(lhs, rhs, put_logical_or),
             ExpressionKind::Assignment(lhs, rhs) => {
-                rhs.emit(context);
-                context.access_variable(lhs);
+                assert!(lhs.is_lvalue);
+                let t = rhs.emit(context);
+                assert_eq!(
+                    t,
+                    Type::new(
+                        Expression {
+                            kind: ExpressionKind::Reference((*lhs).clone()),
+                            is_lvalue: false,
+                        }
+                        .emit(context)
+                        .level
+                            - 1
+                    )
+                );
                 context.put_store();
+                t
             }
             ExpressionKind::Ternary(condition, true_part, false_part) => {
                 let label_1 = context.next_label();
                 let label_2 = context.next_label();
-                condition.emit(context);
+                assert!(condition.emit(context).is_value());
                 context.put_jump_zero(label_1.clone());
                 context.enter_scope();
-                true_part.emit(context);
+                let lt = true_part.emit(context);
                 context.leave_scope();
                 context.put_jump(label_2.clone());
                 context.put_label(label_1);
                 context.enter_scope();
-                false_part.emit(context);
+                let rt = false_part.emit(context);
+                assert!(lt == rt);
                 context.leave_scope();
                 context.put_label(label_2);
+                lt
             }
             ExpressionKind::FunctionCall(name, arguments) => {
-                context.check_arguments(name, arguments);
+                let mut types = Vec::new();
                 for argument in arguments.iter().rev() {
-                    argument.emit(context);
+                    types.push(argument.emit(context));
                 }
+                context.check_arguments(name, &types);
                 context.put_call(name);
                 context.mark_function_called(name);
                 for _ in arguments.iter() {
                     context.put_pop();
                 }
                 context.put_returned_value();
+                context.get_function_return_type(name)
+            }
+            ExpressionKind::Reference(rhs) => {
+                assert!(rhs.is_lvalue);
+                match &rhs.kind {
+                    ExpressionKind::Ternary(condition, true_part, false_part) => {
+                        let rt = Expression {
+                            kind: ExpressionKind::Ternary(
+                                condition.clone(),
+                                Box::new(Expression {
+                                    kind: ExpressionKind::Reference(true_part.clone()),
+                                    is_lvalue: true,
+                                }),
+                                Box::new(Expression {
+                                    kind: ExpressionKind::Reference(false_part.clone()),
+                                    is_lvalue: true,
+                                }),
+                            ),
+                            is_lvalue: false,
+                        }
+                        .emit(context);
+                        Type::new(rt.level + 1)
+                    }
+                    ExpressionKind::Identifier(name) => {
+                        Type::new(context.access_variable(&name).level + 1)
+                    }
+                    ExpressionKind::Dereference(rrhs) => rrhs.emit(context),
+                    _ => unreachable!(),
+                }
+            }
+            ExpressionKind::Dereference(rhs) => {
+                let rt = rhs.emit(context);
+                assert!(rt.is_pointer());
+                context.put_load();
+                Type::new(rt.level - 1)
+            }
+            ExpressionKind::Convert(target, rhs) => {
+                rhs.emit(context);
+                target.clone()
             }
         }
     }

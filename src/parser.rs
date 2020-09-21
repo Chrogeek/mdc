@@ -16,16 +16,28 @@ impl Parser<'_> {
     pub fn parse_program(&mut self) -> Program {
         let mut items = Vec::new();
         while self.accept_token(TokenKind::Eof).is_none() {
-            let t1 = self.expect_token(TokenKind::Int);
-            let t2 = self.expect_token(TokenKind::Identifier);
-            if self.try_token(TokenKind::LeftParenthesis) {
-                self.lexer.unget_token(t2);
-                self.lexer.unget_token(t1);
-                items.push(ProgramItem::Function(self.parse_function()));
-            } else {
-                self.lexer.unget_token(t2);
-                self.lexer.unget_token(t1);
-                items.push(ProgramItem::Declaration(self.parse_declaration()));
+            if self.try_token(TokenKind::Int) {
+                let t = self.parse_type();
+                let token = self.expect_token(TokenKind::Identifier);
+                let next_parenthesis = self.try_token(TokenKind::LeftParenthesis);
+
+                self.lexer.unget_token(token);
+                for _ in 0..t.level {
+                    self.lexer.unget_token(Token {
+                        kind: TokenKind::Asterisk,
+                        text: "*".to_string(),
+                    });
+                }
+                self.lexer.unget_token(Token {
+                    kind: TokenKind::Int,
+                    text: "int".to_string(),
+                });
+
+                if next_parenthesis {
+                    items.push(ProgramItem::Function(self.parse_function()));
+                } else {
+                    items.push(ProgramItem::Declaration(self.parse_declaration()));
+                }
             }
         }
         Program { items }
@@ -33,7 +45,11 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) -> Type {
         self.expect_token(TokenKind::Int);
-        Type { level: 0 }
+        let mut level = 0;
+        while self.accept_token(TokenKind::Asterisk).is_some() {
+            level += 1
+        }
+        Type::new(level)
     }
 
     fn parse_parameter_list(&mut self) -> Vec<(String, Type)> {
@@ -188,9 +204,9 @@ impl Parser<'_> {
     }
 
     fn parse_declaration(&mut self) -> Declaration {
-        self.expect_token(TokenKind::Int);
+        assert!(self.try_token(TokenKind::Int));
         let ans = Declaration {
-            r#type: Type { level: 0 },
+            r#type: self.parse_type(),
             name: self.expect_token(TokenKind::Identifier).text,
             default: if self.accept_token(TokenKind::Assign).is_some() {
                 Some(self.parse_expression())
@@ -215,21 +231,16 @@ impl Parser<'_> {
     }
 
     fn parse_assignment(&mut self) -> Expression {
-        match self.accept_token(TokenKind::Identifier) {
-            Some(token) => {
-                if self.try_token(TokenKind::Assign) {
-                    let name = token.text;
-                    self.expect_token(TokenKind::Assign);
-                    Expression {
-                        kind: ExpressionKind::Assignment(name, Box::new(self.parse_expression())),
-                        is_lvalue: false,
-                    }
-                } else {
-                    self.lexer.unget_token(token);
-                    self.parse_ternary()
-                }
+        let left = self.parse_ternary();
+        if self.accept_token(TokenKind::Assign).is_some() {
+            assert!(left.is_lvalue);
+            let right = self.parse_expression();
+            Expression {
+                kind: ExpressionKind::Assignment(Box::new(left), Box::new(right)),
+                is_lvalue: false,
             }
-            None => self.parse_ternary(),
+        } else {
+            left
         }
     }
 
@@ -410,6 +421,30 @@ impl Parser<'_> {
             Expression {
                 kind: ExpressionKind::LogicalNot(Box::new(self.parse_unary())),
                 is_lvalue: false,
+            }
+        } else if self.accept_token(TokenKind::Asterisk).is_some() {
+            Expression {
+                kind: ExpressionKind::Dereference(Box::new(self.parse_unary())),
+                is_lvalue: true,
+            }
+        } else if self.accept_token(TokenKind::Et).is_some() {
+            Expression {
+                kind: ExpressionKind::Reference(Box::new(self.parse_unary())),
+                is_lvalue: false,
+            }
+        } else if self.accept_token(TokenKind::LeftParenthesis).is_some() {
+            if self.try_token(TokenKind::Int) {
+                let target = self.parse_type();
+                self.expect_token(TokenKind::RightParenthesis);
+                let sub = self.parse_unary();
+                Expression {
+                    is_lvalue: sub.is_lvalue,
+                    kind: ExpressionKind::Convert(target, Box::new(sub)),
+                }
+            } else {
+                let ans = self.parse_expression();
+                self.expect_token(TokenKind::RightParenthesis);
+                ans
             }
         } else {
             self.parse_postfix()

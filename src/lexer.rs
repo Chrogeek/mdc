@@ -155,7 +155,7 @@ impl<'a> Lexer<'a> {
                 b'=' => make_double_symbol_match_arm!(b'=', Assign, Equal),
                 b'<' => make_double_symbol_match_arm!(b'=', Less, LessEqual),
                 b'>' => make_double_symbol_match_arm!(b'=', Greater, GreaterEqual),
-                b'&' => make_double_symbol_match_arm!(b'&', And, LogicalAnd),
+                b'&' => make_double_symbol_match_arm!(b'&', Et, LogicalAnd),
                 b'|' => make_double_symbol_match_arm!(b'|', Or, LogicalOr),
                 b'?' => make_single_symbol_match_arm!(Question),
                 b':' => make_single_symbol_match_arm!(Colon),

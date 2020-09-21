@@ -24,8 +24,8 @@ pub enum TokenKind {
     Greater,
     GreaterEqual,
     Assign,
-    And, // Neither bitwise-and nor bitwise-or operation exists,
-    Or,  // but we reserve them here for convenience
+    Et,
+    Or, // This token is not actually used
     LogicalAnd,
     LogicalOr,
     Question,
@@ -55,8 +55,25 @@ pub struct Type {
 }
 
 impl Type {
+    pub fn new(level: i32) -> Type {
+        Type { level }
+    }
+
+    pub fn make_value() -> Type {
+        Type { level: 0 }
+    }
+
     pub fn measure(&self) -> i32 {
+        assert!(self.level >= 0);
         4
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        self.level > 0
+    }
+
+    pub fn is_value(&self) -> bool {
+        self.level == 0
     }
 }
 

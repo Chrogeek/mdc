@@ -4,7 +4,6 @@ mod lexer;
 mod parser;
 mod util;
 
-use crate::ast::Ast;
 use crate::context::Context;
 use crate::parser::Parser;
 
