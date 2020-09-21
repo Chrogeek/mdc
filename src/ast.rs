@@ -2,24 +2,55 @@ use crate::context::*;
 use crate::util::*;
 use std::io::Write;
 
-pub trait Ast<T: Write> {
-    fn emit(&self, context: &mut Context<T>);
+pub trait Ast<T: Write, U: Write, V: Write> {
+    fn emit(&self, context: &mut Context<T, U, V>);
+}
+
+#[derive(Debug)]
+pub enum ProgramItem {
+    Function(Function),
+    Declaration(Declaration),
 }
 
 #[derive(Debug)]
 pub struct Program {
-    pub functions: Vec<Function>,
+    pub items: Vec<ProgramItem>,
 }
 
-impl<T: Write> Ast<T> for Program {
-    fn emit(&self, context: &mut Context<T>) {
+impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Program {
+    fn emit(&self, context: &mut Context<T, U, V>) {
         let mut entry = false;
         context.put_directive(".text");
         context.put_directive(".globl main");
-        for function in self.functions.iter() {
-            function.emit(context);
-            if function.name == "main" {
-                entry = true;
+        context.write_data(".data");
+        context.write_bss(".bss");
+        for item in self.items.iter() {
+            match item {
+                ProgramItem::Function(function) => {
+                    function.emit(context);
+                    if function.name == "main" {
+                        entry = true;
+                    }
+                }
+                ProgramItem::Declaration(declaration) => {
+                    context.create_global_variable(&declaration.name, &declaration.r#type);
+                    let mangled = mangle_global_variable(&declaration.name);
+                    match &declaration.default {
+                        None => {
+                            context.write_bss(&format!(".comm {}, 4, 4", mangled));
+                        }
+                        Some(expression) => {
+                            context.write_data(".align 4");
+                            context.write_data(&format!(".size {}, 4", mangled));
+                            context.write_data(&format!("{}:", mangled));
+                            if let Expression::IntegerLiteral(value) = expression {
+                                context.write_data(&format!(".word {}", value));
+                            } else {
+                                panic!();
+                            }
+                        }
+                    };
+                }
             }
         }
         context.put_label("main".to_string());
@@ -37,8 +68,8 @@ pub struct Function {
     pub body: Option<Vec<BlockItem>>,
 }
 
-impl<T: Write> Ast<T> for Function {
-    fn emit(&self, context: &mut Context<T>) {
+impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Function {
+    fn emit(&self, context: &mut Context<T, U, V>) {
         self.body
             .as_ref()
             .and_then(|body| {
@@ -104,8 +135,8 @@ pub enum Statement {
     Continue,
 }
 
-impl<T: Write> Ast<T> for Statement {
-    fn emit(&self, context: &mut Context<T>) {
+impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Statement {
+    fn emit(&self, context: &mut Context<T, U, V>) {
         match self {
             Statement::Empty => {}
             Statement::Return(expression) => {
@@ -194,8 +225,8 @@ pub struct Compound {
     pub items: Vec<BlockItem>,
 }
 
-impl<T: Write> Ast<T> for Compound {
-    fn emit(&self, context: &mut Context<T>) {
+impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Compound {
+    fn emit(&self, context: &mut Context<T, U, V>) {
         context.enter_scope();
         for item in self.items.iter() {
             item.emit(context);
@@ -211,8 +242,8 @@ pub struct Declaration {
     pub default: Option<Expression>,
 }
 
-impl<T: Write> Ast<T> for Declaration {
-    fn emit(&self, context: &mut Context<T>) {
+impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Declaration {
+    fn emit(&self, context: &mut Context<T, U, V>) {
         let address = context.create_variable(&self.name, &self.r#type);
         if let Some(expression) = &self.default {
             expression.emit(context);
@@ -229,8 +260,8 @@ pub enum BlockItem {
     Declaration(Declaration),
 }
 
-impl<T: Write> Ast<T> for BlockItem {
-    fn emit(&self, context: &mut Context<T>) {
+impl<T: Write, U: Write, V: Write> Ast<T, U, V> for BlockItem {
+    fn emit(&self, context: &mut Context<T, U, V>) {
         match self {
             BlockItem::Statement(statement) => statement.emit(context),
             BlockItem::Declaration(declaration) => declaration.emit(context),
@@ -263,8 +294,8 @@ pub enum Expression {
     FunctionCall(String, Vec<Expression>),
 }
 
-impl<T: Write> Ast<T> for Expression {
-    fn emit(&self, context: &mut Context<T>) {
+impl<T: Write, U: Write, V: Write> Ast<T, U, V> for Expression {
+    fn emit(&self, context: &mut Context<T, U, V>) {
         macro_rules! make_binary_operator_visitor {
             ($lhs: ident, $rhs: ident, $instruction: ident) => {{
                 $lhs.emit(context);

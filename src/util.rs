@@ -75,5 +75,9 @@ pub fn mangle_function_name(name: &String) -> String {
 }
 
 pub fn get_function_epilogue(name: &String) -> String {
-    "_epilogue_".to_string() + name
+    "_e_".to_string() + name
+}
+
+pub fn mangle_global_variable(name: &String) -> String {
+    "_g_".to_string() + name
 }

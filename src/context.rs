@@ -5,7 +5,7 @@ use std::io::Write;
 macro_rules! assembly {
     ($this: expr, $($instruction: expr),*) => {{
             $(
-                writeln!($this.output, "{}", $instruction.to_string()).unwrap();
+                writeln!($this.text_output, "{}", $instruction.to_string()).unwrap();
             )*
         }
     };
@@ -78,27 +78,41 @@ pub struct Primitive {
     defined: bool,
 }
 
-pub struct Context<T: Write> {
-    output: T,
+pub struct Context<T: Write, U: Write, V: Write> {
+    text_output: T,
+    data_output: U,
+    bss_output: V,
     current_function: Option<String>,
     label_count: i32,
     offset: i32,
     scope_stack: Vec<Scope>,
     loop_stack: Vec<Loop>,
+    global_variables: HashMap<String, Type>,
     function_table: HashMap<String, Primitive>,
 }
 
-impl<T: Write> Context<T> {
-    pub fn new(output: T) -> Context<T> {
+impl<T: Write, U: Write, V: Write> Context<T, U, V> {
+    pub fn new(text_output: T, data_output: U, bss_output: V) -> Context<T, U, V> {
         Context {
-            output,
+            text_output,
+            data_output,
+            bss_output,
             current_function: None,
             label_count: 0,
             offset: 0,
             scope_stack: Vec::new(),
             loop_stack: Vec::new(),
+            global_variables: HashMap::new(),
             function_table: HashMap::new(),
         }
+    }
+
+    pub fn write_data(&mut self, asm: &str) {
+        writeln!(self.data_output, "{}", asm).unwrap();
+    }
+
+    pub fn write_bss(&mut self, asm: &str) {
+        writeln!(self.bss_output, "{}", asm).unwrap();
     }
 
     pub fn enter_scope(&mut self) {
@@ -129,6 +143,24 @@ impl<T: Write> Context<T> {
         self.loop_stack.last().unwrap().label_continue.clone()
     }
 
+    pub fn create_global_variable(&mut self, name: &String, r#type: &Type) {
+        assert!(!self.function_table.contains_key(name));
+        assert!(self
+            .global_variables
+            .insert(name.clone(), r#type.clone())
+            .is_none());
+    }
+
+    pub fn access_global_variable(&mut self, name: &String) {
+        assert!(self.global_variables.get(name).is_some());
+        assembly!(
+            self,
+            "addi sp, sp, -4",
+            &format!("la t1, {}", mangle_global_variable(name)),
+            "sw t1, 0(sp)"
+        );
+    }
+
     // Returns the address of created variable
     pub fn create_variable(&mut self, name: &String, r#type: &Type) -> i32 {
         self.scope_stack
@@ -146,7 +178,7 @@ impl<T: Write> Context<T> {
                 return;
             }
         }
-        panic!();
+        self.access_global_variable(name);
     }
 
     // Creates a variable with specified offset, used for arguments
@@ -170,6 +202,7 @@ impl<T: Write> Context<T> {
     }
 
     pub fn declare_function(&mut self, name: &String, return_type: Type, parameters: Vec<Type>) {
+        assert!(!self.global_variables.contains_key(name));
         if !self.function_table.contains_key(name) {
             self.function_table.insert(
                 name.clone(),
@@ -187,6 +220,7 @@ impl<T: Write> Context<T> {
     }
 
     pub fn define_function(&mut self, name: &String, return_type: Type, parameters: Vec<Type>) {
+        assert!(!self.global_variables.contains_key(name));
         if let Some(primitive) = self.function_table.get_mut(name) {
             if primitive.defined
                 || primitive.return_type != return_type
@@ -221,7 +255,7 @@ impl<T: Write> Context<T> {
         }
     }
 
-    pub fn check_arguments<U>(&self, name: &String, arguments: &Vec<U>) {
+    pub fn check_arguments<W>(&self, name: &String, arguments: &Vec<W>) {
         assert_eq!(
             arguments.len(),
             self.function_table.get(name).unwrap().parameters.len()

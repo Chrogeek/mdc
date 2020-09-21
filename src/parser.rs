@@ -14,15 +14,21 @@ impl Parser<'_> {
     }
 
     pub fn parse_program(&mut self) -> Program {
-        let functions = {
-            let mut list = Vec::new();
-            while !self.try_token(TokenKind::Eof) {
-                list.push(self.parse_function());
+        let mut items = Vec::new();
+        while self.accept_token(TokenKind::Eof).is_none() {
+            let t1 = self.expect_token(TokenKind::Int);
+            let t2 = self.expect_token(TokenKind::Identifier);
+            if self.try_token(TokenKind::LeftParenthesis) {
+                self.lexer.unget_token(t2);
+                self.lexer.unget_token(t1);
+                items.push(ProgramItem::Function(self.parse_function()));
+            } else {
+                self.lexer.unget_token(t2);
+                self.lexer.unget_token(t1);
+                items.push(ProgramItem::Declaration(self.parse_declaration()));
             }
-            list
-        };
-        self.expect_token(TokenKind::Eof);
-        Program { functions }
+        }
+        Program { items }
     }
 
     fn parse_type(&mut self) -> Type {
