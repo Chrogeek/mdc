@@ -49,7 +49,7 @@ pub struct Token {
     pub text: String, // token from the source code (as string)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Type {
     pub level: i32, // Level of pointers (e.g. 3 for 'int ***')
 }

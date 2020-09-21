@@ -25,6 +25,7 @@ impl<T: Write> Ast<T> for Program {
         context.put_label("main".to_string());
         context.put_jump("__main".to_string());
         assert!(entry);
+        context.check_undefined_symbol();
     }
 }
 
@@ -33,23 +34,52 @@ pub struct Function {
     pub r#type: Type,
     pub name: String,
     pub parameters: Vec<(String, Type)>,
-    pub body: Option<Compound>,
+    pub body: Option<Vec<BlockItem>>,
 }
 
 impl<T: Write> Ast<T> for Function {
     fn emit(&self, context: &mut Context<T>) {
-        context.enter_function(&self.name);
-        context.put_set_frame(self.name.clone());
-        context.enter_scope();
-        self.body.as_ref().and_then(|body| {
-            body.emit(context);
-            Some(())
-        });
-        context.put_push(0);
-        context.put_return(); // default return value: 0
-        context.leave_scope();
-        context.exit_function();
-        context.put_end_frame();
+        self.body
+            .as_ref()
+            .and_then(|body| {
+                context.define_function(
+                    &self.name,
+                    self.r#type.clone(),
+                    self.parameters
+                        .iter()
+                        .map(|tuple| tuple.1.clone())
+                        .collect(),
+                );
+                context.enter_function(&self.name);
+                context.put_set_frame(self.name.clone());
+                context.enter_scope();
+                let mut offset = 0;
+                for (parameter_name, parameter_type) in self.parameters.iter() {
+                    context.create_located(parameter_name, parameter_type, offset + 8);
+                    eprintln!("{}, {}", parameter_name, offset + 8);
+                    offset += parameter_type.measure();
+                }
+                for item in body.iter() {
+                    item.emit(context);
+                }
+                context.put_push(0);
+                context.put_return(); // default return value: 0
+                context.leave_scope();
+                context.exit_function();
+                context.put_end_frame();
+                Some(())
+            })
+            .or_else(|| {
+                context.declare_function(
+                    &self.name,
+                    self.r#type.clone(),
+                    self.parameters
+                        .iter()
+                        .map(|tuple| tuple.1.clone())
+                        .collect(),
+                );
+                None
+            });
     }
 }
 
@@ -230,7 +260,7 @@ pub enum Expression {
     LogicalOr(Box<Expression>, Box<Expression>),
     Assignment(String, Box<Expression>),
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
-    FunctionCall(Vec<Expression>),
+    FunctionCall(String, Vec<Expression>),
 }
 
 impl<T: Write> Ast<T> for Expression {
@@ -306,8 +336,17 @@ impl<T: Write> Ast<T> for Expression {
                 context.leave_scope();
                 context.put_label(label_2);
             }
-            Expression::FunctionCall(_) => {
-                unimplemented!();
+            Expression::FunctionCall(name, arguments) => {
+                context.check_arguments(name, arguments);
+                for argument in arguments.iter().rev() {
+                    argument.emit(context);
+                }
+                context.put_call(name);
+                context.mark_function_called(name);
+                for _ in arguments.iter() {
+                    context.put_pop();
+                }
+                context.put_returned_value();
             }
         }
     }

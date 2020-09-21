@@ -49,11 +49,33 @@ impl Scope {
     pub fn access_variable(&self, name: &String) -> Option<Variable> {
         Some(self.variables.get(name)?.clone())
     }
+
+    // Creates a variable with specified memory offset, dedicated for arguments.
+    // Offset must be outside of current scope frame.
+    pub fn create_located(&mut self, name: &String, r#type: &Type, offset: i32) {
+        assert!(offset >= self.start);
+        assert!(!self.variables.contains_key(name));
+        self.variables.insert(
+            name.clone(),
+            Variable {
+                r#type: r#type.clone(),
+                offset,
+            },
+        );
+    }
 }
 
 pub struct Loop {
     label_break: String,
     label_continue: String,
+}
+
+#[derive(PartialEq)]
+pub struct Primitive {
+    return_type: Type,
+    parameters: Vec<Type>,
+    called: bool,
+    defined: bool,
 }
 
 pub struct Context<T: Write> {
@@ -63,6 +85,7 @@ pub struct Context<T: Write> {
     offset: i32,
     scope_stack: Vec<Scope>,
     loop_stack: Vec<Loop>,
+    function_table: HashMap<String, Primitive>,
 }
 
 impl<T: Write> Context<T> {
@@ -74,6 +97,7 @@ impl<T: Write> Context<T> {
             offset: 0,
             scope_stack: Vec::new(),
             loop_stack: Vec::new(),
+            function_table: HashMap::new(),
         }
     }
 
@@ -125,17 +149,83 @@ impl<T: Write> Context<T> {
         panic!();
     }
 
+    // Creates a variable with specified offset, used for arguments
+    pub fn create_located(&mut self, name: &String, r#type: &Type, offset: i32) {
+        self.scope_stack
+            .last_mut()
+            .unwrap()
+            .create_located(name, r#type, offset);
+    }
+
     pub fn enter_function(&mut self, function_name: &String) {
         self.current_function = Some(function_name.clone());
         self.put_label(mangle_function_name(function_name));
     }
 
     pub fn exit_function(&mut self) {
-        self.put_directive(&format!(
-            "{0}:",
-            get_function_epilogue(&self.current_function.clone().unwrap())
+        self.put_label(get_function_epilogue(
+            &self.current_function.clone().unwrap(),
         ));
         self.current_function = None;
+    }
+
+    pub fn declare_function(&mut self, name: &String, return_type: Type, parameters: Vec<Type>) {
+        if !self.function_table.contains_key(name) {
+            self.function_table.insert(
+                name.clone(),
+                Primitive {
+                    return_type,
+                    parameters,
+                    called: false,
+                    defined: false,
+                },
+            );
+        } else {
+            let function = self.function_table.get(name).unwrap();
+            assert!(function.return_type == return_type && function.parameters == parameters);
+        }
+    }
+
+    pub fn define_function(&mut self, name: &String, return_type: Type, parameters: Vec<Type>) {
+        if let Some(primitive) = self.function_table.get_mut(name) {
+            if primitive.defined
+                || primitive.return_type != return_type
+                || primitive.parameters != parameters
+            {
+                panic!();
+            } else {
+                primitive.defined = true;
+            }
+        } else {
+            self.function_table.insert(
+                name.clone(),
+                Primitive {
+                    return_type,
+                    parameters,
+                    called: false,
+                    defined: true,
+                },
+            );
+        }
+    }
+
+    pub fn mark_function_called(&mut self, name: &String) {
+        self.function_table.get_mut(name).unwrap().called = true;
+    }
+
+    // Checks if there exists any called but undefined functions.
+    // Declared, undefined while never called function primitives are not considered error.
+    pub fn check_undefined_symbol(&self) {
+        for primitive in self.function_table.values().into_iter() {
+            assert!(!primitive.called || primitive.defined);
+        }
+    }
+
+    pub fn check_arguments<U>(&self, name: &String, arguments: &Vec<U>) {
+        assert_eq!(
+            arguments.len(),
+            self.function_table.get(name).unwrap().parameters.len()
+        );
     }
 
     pub fn next_label(&mut self) -> String {
@@ -173,6 +263,11 @@ impl<T: Write> Context<T> {
                 get_function_epilogue(&self.current_function.clone().unwrap())
             )
         );
+    }
+
+    pub fn put_returned_value(&mut self) {
+        self.offset -= 4;
+        assembly!(self, "addi sp, sp, -4", "sw a0, 0(sp)");
     }
 
     pub fn put_negate(&mut self) {
@@ -325,5 +420,12 @@ impl<T: Write> Context<T> {
 
     pub fn put_label(&mut self, label: String) {
         assembly!(self, &format!("{}:", label));
+    }
+
+    pub fn put_call(&mut self, function_name: &String) {
+        assembly!(
+            self,
+            &format!("call {}", mangle_function_name(&function_name))
+        );
     }
 }

@@ -27,7 +27,7 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) -> Type {
         self.expect_token(TokenKind::Int);
-        Type { level: 1 }
+        Type { level: 0 }
     }
 
     fn parse_parameter_list(&mut self) -> Vec<(String, Type)> {
@@ -55,6 +55,7 @@ impl Parser<'_> {
                 }
             }
         }
+        self.expect_token(TokenKind::RightParenthesis);
         ans
     }
 
@@ -71,7 +72,7 @@ impl Parser<'_> {
             body: if self.accept_token(TokenKind::Semicolon).is_some() {
                 None
             } else {
-                Some(self.parse_compound())
+                Some(self.parse_compound().items)
             },
         }
     }
@@ -335,7 +336,7 @@ impl Parser<'_> {
     fn parse_postfix(&mut self) -> Expression {
         if let Some(token) = self.accept_token(TokenKind::Identifier) {
             if self.accept_token(TokenKind::LeftParenthesis).is_some() {
-                Expression::FunctionCall(self.parse_argument_list())
+                Expression::FunctionCall(token.text, self.parse_argument_list())
             } else {
                 self.lexer.unget_token(token);
                 self.parse_primary()
