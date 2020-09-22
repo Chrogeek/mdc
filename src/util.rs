@@ -52,37 +52,59 @@ pub struct Token {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Type {
-    pub level: u32, // Level of pointers (e.g. 3 for 'int ***')
-    pub bounds: Vec<u32>,
+pub enum Type {
+    Primitive,
+    Pointer(Box<Type>),
+    Array(Box<Type>, u32),
 }
 
 impl Type {
-    pub fn new(level: u32) -> Type {
-        Type {
-            level,
-            bounds: Vec::new(),
+    pub fn measure(&self) -> u32 {
+        match self {
+            Type::Primitive => 4,
+            Type::Pointer(_) => 4,
+            Type::Array(ty, size) => ty.measure() * size,
         }
     }
 
-    pub fn make_value() -> Type {
-        Type::new(0)
-    }
-
-    pub fn measure(&self) -> u32 {
-        self.bounds.iter().fold(4, |acc, cur| acc * cur)
+    pub fn is_primitive(&self) -> bool {
+        if let Type::Primitive = self {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn is_pointer(&self) -> bool {
-        self.level > 0 && self.bounds.is_empty()
-    }
-
-    pub fn is_value(&self) -> bool {
-        self.level == 0 && self.bounds.is_empty()
+        if let Type::Pointer(_) = self {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn is_array(&self) -> bool {
-        !self.bounds.is_empty()
+        if let Type::Array(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn unwrap_pointer(self) -> Type {
+        if let Type::Pointer(ty) = self {
+            *ty
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn unwrap_array(self) -> Type {
+        if let Type::Array(ty, _) = self {
+            *ty
+        } else {
+            panic!();
+        }
     }
 }
 

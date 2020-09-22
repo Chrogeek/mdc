@@ -17,16 +17,17 @@ impl Parser<'_> {
         let mut items = Vec::new();
         while self.accept_token(TokenKind::Eof).is_none() {
             if self.try_token(TokenKind::Int) {
-                let t = self.parse_type();
+                let mut t = self.parse_type();
                 let token = self.expect_token(TokenKind::Identifier);
                 let next_parenthesis = self.try_token(TokenKind::LeftParenthesis);
 
                 self.lexer.unget_token(token);
-                for _ in 0..t.level {
+                while let Type::Pointer(ty) = t {
                     self.lexer.unget_token(Token {
                         kind: TokenKind::Asterisk,
                         text: "*".to_string(),
                     });
+                    t = *ty;
                 }
                 self.lexer.unget_token(Token {
                     kind: TokenKind::Int,
@@ -45,11 +46,11 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) -> Type {
         self.expect_token(TokenKind::Int);
-        let mut level = 0;
+        let mut ty = Type::Primitive;
         while self.accept_token(TokenKind::Asterisk).is_some() {
-            level += 1
+            ty = Type::Pointer(Box::new(ty));
         }
-        Type::new(level)
+        ty
     }
 
     fn parse_parameter_list(&mut self) -> Vec<(String, Type)> {
@@ -214,14 +215,18 @@ impl Parser<'_> {
                 default: Some(self.parse_expression()),
             }
         } else {
+            let mut bounds = Vec::new();
             while self.accept_token(TokenKind::LeftBracket).is_some() {
                 let index = self
                     .expect_token(TokenKind::Integer)
                     .text
                     .parse::<i32>()
                     .unwrap() as u32;
-                ty.bounds.push(index);
+                bounds.push(index);
                 self.expect_token(TokenKind::RightBracket);
+            }
+            for size in bounds.into_iter().rev() {
+                ty = Type::Array(Box::new(ty), size);
             }
             Declaration {
                 ty,

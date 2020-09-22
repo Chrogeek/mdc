@@ -153,27 +153,21 @@ impl Statement {
                 true_branch,
                 false_branch,
             } => {
+                let label_1 = context.next_label();
+                let label_2 = context.next_label();
+                assert!(condition.emit(context).is_primitive());
+                context.put_jump_zero(label_1.clone());
+                context.enter_scope();
+                true_branch.emit(context);
+                context.leave_scope();
+                context.put_jump(label_2.clone());
+                context.put_label(label_1);
                 if let Some(false_part) = false_branch {
-                    let label_1 = context.next_label();
-                    let label_2 = context.next_label();
-                    assert!(condition.emit(context).is_value());
-                    context.put_jump_zero(label_1.clone());
-                    context.enter_scope();
-                    true_branch.emit(context);
-                    context.leave_scope();
-                    context.put_jump(label_2.clone());
-                    context.put_label(label_1);
                     context.enter_scope();
                     false_part.emit(context);
                     context.leave_scope();
-                    context.put_label(label_2);
-                } else {
-                    let label = context.next_label();
-                    assert!(condition.emit(context).is_value());
-                    context.put_jump_zero(label.clone());
-                    true_branch.emit(context);
-                    context.put_label(label);
                 }
+                context.put_label(label_2);
             }
             Statement::Compound(compound) => {
                 compound.emit(context);
@@ -195,7 +189,7 @@ impl Statement {
                 }
                 context.put_label(label_restart.clone());
                 if let Some(expression) = condition {
-                    assert!(expression.emit(context).is_value());
+                    assert!(expression.emit(context).is_primitive());
                     context.put_jump_zero(label_break.clone());
                 }
                 context.enter_scope();
@@ -317,10 +311,10 @@ impl Expression {
     pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) -> Type {
         macro_rules! make_binary_operator {
             ($lhs: ident, $rhs: ident, $instruction: ident) => {{
-                assert!($lhs.emit(context).is_value());
-                assert!($rhs.emit(context).is_value());
+                assert!($lhs.emit(context).is_primitive());
+                assert!($rhs.emit(context).is_primitive());
                 context.$instruction();
-                Type::make_value()
+                Type::Primitive
             }};
         }
 
@@ -330,14 +324,14 @@ impl Expression {
                 let rt = $rhs.emit(context);
                 assert_eq!(lt, rt);
                 context.$instruction();
-                Type::make_value()
+                Type::Primitive
             }};
         }
 
         match &self.kind {
             ExpressionKind::IntegerLiteral(value) => {
                 context.put_push(*value);
-                Type::make_value()
+                Type::Primitive
             }
             ExpressionKind::Identifier(name) => {
                 let rt = context.access_variable(name);
@@ -345,30 +339,30 @@ impl Expression {
                 rt
             }
             ExpressionKind::Negation(rhs) => {
-                assert!(rhs.emit(context).is_value());
+                assert!(rhs.emit(context).is_primitive());
                 context.put_negate();
-                Type::make_value()
+                Type::Primitive
             }
             ExpressionKind::Not(rhs) => {
-                assert!(rhs.emit(context).is_value());
+                assert!(rhs.emit(context).is_primitive());
                 context.put_not();
-                Type::make_value()
+                Type::Primitive
             }
             ExpressionKind::LogicalNot(rhs) => {
-                assert!(rhs.emit(context).is_value());
+                assert!(rhs.emit(context).is_primitive());
                 context.put_logical_not();
-                Type::make_value()
+                Type::Primitive
             }
             ExpressionKind::Addition(lhs, rhs) => {
                 let lt = lhs.emit(context);
                 let rt = rhs.emit(context);
-                if lt.is_value() && rt.is_value() {
+                if lt.is_primitive() && rt.is_primitive() {
                     context.put_add();
-                    Type::make_value()
-                } else if lt.is_value() && rt.is_pointer() {
+                    Type::Primitive
+                } else if lt.is_primitive() && rt.is_pointer() {
                     context.put_add_pointer_left();
                     rt
-                } else if lt.is_pointer() && rt.is_value() {
+                } else if lt.is_pointer() && rt.is_primitive() {
                     context.put_add_pointer_right();
                     lt
                 } else {
@@ -378,10 +372,10 @@ impl Expression {
             ExpressionKind::Subtraction(lhs, rhs) => {
                 let lt = lhs.emit(context);
                 let rt = rhs.emit(context);
-                if lt.is_value() && rt.is_value() {
+                if lt.is_primitive() && rt.is_primitive() {
                     context.put_subtract();
-                    Type::make_value()
-                } else if lt.is_pointer() && rt.is_value() {
+                    Type::Primitive
+                } else if lt.is_pointer() && rt.is_primitive() {
                     context.put_negate();
                     context.put_add_pointer_right();
                     lt
@@ -390,7 +384,7 @@ impl Expression {
                     context.put_subtract();
                     context.put_push(4);
                     context.put_divide();
-                    Type::make_value()
+                    Type::Primitive
                 } else {
                     panic!();
                 }
@@ -419,15 +413,12 @@ impl Expression {
                 let t = rhs.emit(context);
                 assert_eq!(
                     t,
-                    Type::new(
-                        Expression {
-                            kind: ExpressionKind::Reference((*lhs).clone()),
-                            is_lvalue: false,
-                        }
-                        .emit(context)
-                        .level
-                            - 1
-                    )
+                    Expression {
+                        kind: ExpressionKind::Reference((*lhs).clone()),
+                        is_lvalue: false,
+                    }
+                    .emit(context)
+                    .unwrap_pointer()
                 );
                 context.put_store();
                 t
@@ -435,7 +426,7 @@ impl Expression {
             ExpressionKind::Ternary(condition, true_part, false_part) => {
                 let label_1 = context.next_label();
                 let label_2 = context.next_label();
-                assert!(condition.emit(context).is_value());
+                assert!(condition.emit(context).is_primitive());
                 context.put_jump_zero(label_1.clone());
                 context.enter_scope();
                 let lt = true_part.emit(context);
@@ -466,12 +457,12 @@ impl Expression {
             ExpressionKind::Reference(rhs) => {
                 assert!(rhs.is_lvalue);
                 match &rhs.kind {
-                    ExpressionKind::Ternary(_, _, _) => Type::new(rhs.emit(context).level + 1),
+                    ExpressionKind::Ternary(_, _, _) => Type::Pointer(Box::new(rhs.emit(context))),
                     ExpressionKind::Identifier(name) => {
-                        Type::new(context.access_variable(&name).level + 1)
+                        Type::Pointer(Box::new(context.access_variable(&name)))
                     }
                     ExpressionKind::Dereference(rrhs) => rrhs.emit(context),
-                    ExpressionKind::Index(_, _) => Type::new(rhs.emit(context).level + 1),
+                    ExpressionKind::Index(_, _) => Type::Pointer(Box::new(rhs.emit(context))),
                     _ => unreachable!(),
                 }
             }
@@ -479,7 +470,7 @@ impl Expression {
                 let rt = rhs.emit(context);
                 assert!(rt.is_pointer());
                 context.put_load();
-                Type::new(rt.level - 1)
+                rt.unwrap_pointer()
             }
             ExpressionKind::Convert(target, rhs) => {
                 rhs.emit(context);
@@ -493,18 +484,18 @@ impl Expression {
                 };
                 let rt = index.emit(context);
                 assert!(lt.is_pointer() || lt.is_array());
-                assert!(rt.is_value());
+                assert!(rt.is_primitive());
                 let mut ret = lt;
                 if ret.is_array() {
-                    ret.bounds.remove(0);
+                    ret = ret.unwrap_array();
                     context.put_push(ret.measure() as i32);
                     context.put_multiply();
                     context.put_add();
                 } else {
+                    ret = ret.unwrap_pointer();
                     context.put_push(4);
                     context.put_multiply();
                     context.put_add();
-                    ret.level -= 1;
                 }
                 ret
             }
