@@ -34,13 +34,13 @@ impl Scope {
         }
     }
 
-    pub fn create_variable(&mut self, name: &String, r#type: &Type) {
+    pub fn create_variable(&mut self, name: &String, ty: &Type) {
         assert!(!self.variables.contains_key(name));
-        self.offset -= r#type.measure();
+        self.offset -= ty.measure() as i32;
         self.variables.insert(
             name.clone(),
             Variable {
-                r#type: r#type.clone(),
+                ty: ty.clone(),
                 offset: self.offset,
             },
         );
@@ -52,13 +52,13 @@ impl Scope {
 
     // Creates a variable with specified memory offset, dedicated for arguments.
     // Offset must be outside of current scope frame.
-    pub fn create_located(&mut self, name: &String, r#type: &Type, offset: i32) {
+    pub fn create_located(&mut self, name: &String, ty: &Type, offset: i32) {
         assert!(offset >= self.start);
         assert!(!self.variables.contains_key(name));
         self.variables.insert(
             name.clone(),
             Variable {
-                r#type: r#type.clone(),
+                ty: ty.clone(),
                 offset,
             },
         );
@@ -143,11 +143,11 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         self.loop_stack.last().unwrap().label_continue.clone()
     }
 
-    pub fn create_global_variable(&mut self, name: &String, r#type: &Type) {
+    pub fn create_global_variable(&mut self, name: &String, ty: &Type) {
         assert!(!self.function_table.contains_key(name));
         assert!(self
             .global_variables
-            .insert(name.clone(), r#type.clone())
+            .insert(name.clone(), ty.clone())
             .is_none());
     }
 
@@ -167,12 +167,12 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
     }
 
     // Returns the address of created variable
-    pub fn create_variable(&mut self, name: &String, r#type: &Type) -> i32 {
+    pub fn create_variable(&mut self, name: &String, ty: &Type) -> i32 {
         self.scope_stack
             .last_mut()
             .unwrap()
-            .create_variable(name, r#type);
-        self.put_allocate(r#type.measure());
+            .create_variable(name, ty);
+        self.put_allocate(ty.measure() as i32);
         self.offset
     }
 
@@ -180,18 +180,18 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         for scope in self.scope_stack.iter().rev() {
             if let Some(variable) = scope.access_variable(name) {
                 self.put_locate(variable.offset);
-                return variable.r#type;
+                return variable.ty;
             }
         }
         self.access_global_variable(name)
     }
 
     // Creates a variable with specified offset, used for arguments
-    pub fn create_located(&mut self, name: &String, r#type: &Type, offset: i32) {
+    pub fn create_located(&mut self, name: &String, ty: &Type, offset: i32) {
         self.scope_stack
             .last_mut()
             .unwrap()
-            .create_located(name, r#type, offset);
+            .create_located(name, ty, offset);
     }
 
     pub fn enter_function(&mut self, function_name: &String) {
@@ -341,6 +341,32 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
     pub fn put_add(&mut self) {
         self.offset += 4;
         binary_operator_assembly!(self, "add t1, t1, t2");
+    }
+
+    pub fn put_add_pointer_left(&mut self) {
+        self.offset += 4;
+        assembly!(
+            self,
+            "lw t1, 4(sp)",
+            "slli t1, t1, 2",
+            "lw t2, 0(sp)",
+            "add t1, t1, t2",
+            "addi sp, sp, 4",
+            "sw t1, 0(sp)"
+        );
+    }
+
+    pub fn put_add_pointer_right(&mut self) {
+        self.offset += 4;
+        assembly!(
+            self,
+            "lw t1, 4(sp)",
+            "lw t2, 0(sp)",
+            "slli t2, t2, 2",
+            "add t1, t1, t2",
+            "addi sp, sp, 4",
+            "sw t1, 0(sp)"
+        );
     }
 
     pub fn put_subtract(&mut self) {

@@ -145,6 +145,8 @@ impl<'a> Lexer<'a> {
                 b')' => make_single_symbol_match_arm!(RightParenthesis),
                 b'{' => make_single_symbol_match_arm!(LeftBrace),
                 b'}' => make_single_symbol_match_arm!(RightBrace),
+                b'[' => make_single_symbol_match_arm!(LeftBracket),
+                b']' => make_single_symbol_match_arm!(RightBracket),
                 b'~' => make_single_symbol_match_arm!(Not),
                 b'!' => make_double_symbol_match_arm!(b'=', LogicalNot, Unequal),
                 b'-' => make_single_symbol_match_arm!(Hyphen),

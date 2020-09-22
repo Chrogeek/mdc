@@ -29,11 +29,15 @@ impl Program {
                     }
                 }
                 ProgramItem::Declaration(declaration) => {
-                    context.create_global_variable(&declaration.name, &declaration.r#type);
+                    context.create_global_variable(&declaration.name, &declaration.ty);
                     let mangled = mangle_global_variable(&declaration.name);
                     match &declaration.default {
                         None => {
-                            context.write_bss(&format!(".comm {}, 4, 4", mangled));
+                            context.write_bss(&format!(
+                                ".comm {}, {}, 4",
+                                mangled,
+                                declaration.ty.measure()
+                            ));
                         }
                         Some(expression) => {
                             context.write_data(".align 4");
@@ -58,7 +62,7 @@ impl Program {
 
 #[derive(Debug)]
 pub struct Function {
-    pub r#type: Type,
+    pub ty: Type,
     pub name: String,
     pub parameters: Vec<(String, Type)>,
     pub body: Option<Vec<BlockItem>>,
@@ -71,7 +75,7 @@ impl Function {
             .and_then(|body| {
                 context.define_function(
                     &self.name,
-                    self.r#type.clone(),
+                    self.ty.clone(),
                     self.parameters
                         .iter()
                         .map(|tuple| tuple.1.clone())
@@ -84,7 +88,7 @@ impl Function {
                 for (parameter_name, parameter_type) in self.parameters.iter() {
                     context.create_located(parameter_name, parameter_type, offset + 8);
                     eprintln!("{}, {}", parameter_name, offset + 8);
-                    offset += parameter_type.measure();
+                    offset += parameter_type.measure() as i32;
                 }
                 for item in body.iter() {
                     item.emit(context);
@@ -99,7 +103,7 @@ impl Function {
             .or_else(|| {
                 context.declare_function(
                     &self.name,
-                    self.r#type.clone(),
+                    self.ty.clone(),
                     self.parameters
                         .iter()
                         .map(|tuple| tuple.1.clone())
@@ -234,14 +238,14 @@ impl Compound {
 
 #[derive(Debug)]
 pub struct Declaration {
-    pub r#type: Type,
+    pub ty: Type,
     pub name: String,
     pub default: Option<Expression>,
 }
 
 impl Declaration {
     pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
-        context.create_variable(&self.name, &self.r#type);
+        context.create_variable(&self.name, &self.ty);
         if let Some(expression) = &self.default {
             Expression {
                 kind: ExpressionKind::Assignment(
@@ -300,6 +304,7 @@ pub enum ExpressionKind {
     Reference(Box<Expression>),
     Dereference(Box<Expression>),
     Convert(Type, Box<Expression>),
+    Index(Box<Expression>, Box<Expression>),
 }
 
 #[derive(Debug, Clone)]
@@ -354,8 +359,42 @@ impl Expression {
                 context.put_logical_not();
                 Type::make_value()
             }
-            ExpressionKind::Addition(lhs, rhs) => make_binary_operator!(lhs, rhs, put_add),
-            ExpressionKind::Subtraction(lhs, rhs) => make_binary_operator!(lhs, rhs, put_subtract),
+            ExpressionKind::Addition(lhs, rhs) => {
+                let lt = lhs.emit(context);
+                let rt = rhs.emit(context);
+                if lt.is_value() && rt.is_value() {
+                    context.put_add();
+                    Type::make_value()
+                } else if lt.is_value() && rt.is_pointer() {
+                    context.put_add_pointer_left();
+                    rt
+                } else if lt.is_pointer() && rt.is_value() {
+                    context.put_add_pointer_right();
+                    lt
+                } else {
+                    panic!();
+                }
+            }
+            ExpressionKind::Subtraction(lhs, rhs) => {
+                let lt = lhs.emit(context);
+                let rt = rhs.emit(context);
+                if lt.is_value() && rt.is_value() {
+                    context.put_subtract();
+                    Type::make_value()
+                } else if lt.is_pointer() && rt.is_value() {
+                    context.put_negate();
+                    context.put_add_pointer_right();
+                    lt
+                } else if lt.is_pointer() && rt.is_pointer() {
+                    assert!(lt == rt);
+                    context.put_subtract();
+                    context.put_push(4);
+                    context.put_divide();
+                    Type::make_value()
+                } else {
+                    panic!();
+                }
+            }
             ExpressionKind::Multiplication(lhs, rhs) => {
                 make_binary_operator!(lhs, rhs, put_multiply)
             }
@@ -427,28 +466,12 @@ impl Expression {
             ExpressionKind::Reference(rhs) => {
                 assert!(rhs.is_lvalue);
                 match &rhs.kind {
-                    ExpressionKind::Ternary(condition, true_part, false_part) => {
-                        let rt = Expression {
-                            kind: ExpressionKind::Ternary(
-                                condition.clone(),
-                                Box::new(Expression {
-                                    kind: ExpressionKind::Reference(true_part.clone()),
-                                    is_lvalue: true,
-                                }),
-                                Box::new(Expression {
-                                    kind: ExpressionKind::Reference(false_part.clone()),
-                                    is_lvalue: true,
-                                }),
-                            ),
-                            is_lvalue: false,
-                        }
-                        .emit(context);
-                        Type::new(rt.level + 1)
-                    }
+                    ExpressionKind::Ternary(_, _, _) => Type::new(rhs.emit(context).level + 1),
                     ExpressionKind::Identifier(name) => {
                         Type::new(context.access_variable(&name).level + 1)
                     }
                     ExpressionKind::Dereference(rrhs) => rrhs.emit(context),
+                    ExpressionKind::Index(_, _) => Type::new(rhs.emit(context).level + 1),
                     _ => unreachable!(),
                 }
             }
@@ -461,6 +484,29 @@ impl Expression {
             ExpressionKind::Convert(target, rhs) => {
                 rhs.emit(context);
                 target.clone()
+            }
+            ExpressionKind::Index(base, index) => {
+                let lt = if let ExpressionKind::Identifier(name) = &base.kind {
+                    context.access_variable(name)
+                } else {
+                    base.emit(context)
+                };
+                let rt = index.emit(context);
+                assert!(lt.is_pointer() || lt.is_array());
+                assert!(rt.is_value());
+                let mut ret = lt;
+                if ret.is_array() {
+                    ret.bounds.remove(0);
+                    context.put_push(ret.measure() as i32);
+                    context.put_multiply();
+                    context.put_add();
+                } else {
+                    context.put_push(4);
+                    context.put_multiply();
+                    context.put_add();
+                    ret.level -= 1;
+                }
+                ret
             }
         }
     }

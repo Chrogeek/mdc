@@ -56,9 +56,9 @@ impl Parser<'_> {
         let mut ans = Vec::new();
         if !self.try_token(TokenKind::RightParenthesis) {
             loop {
-                let r#type = self.parse_type();
+                let ty = self.parse_type();
                 let name = self.expect_token(TokenKind::Identifier).text;
-                ans.push((name, r#type));
+                ans.push((name, ty));
                 if self.accept_token(TokenKind::Comma).is_none() {
                     break;
                 }
@@ -82,13 +82,13 @@ impl Parser<'_> {
     }
 
     fn parse_function(&mut self) -> Function {
-        let r#type = self.parse_type();
+        let ty = self.parse_type();
         let name = self.expect_token(TokenKind::Identifier).text;
         self.expect_token(TokenKind::LeftParenthesis);
         let parameters = self.parse_parameter_list();
         self.expect_token(TokenKind::RightParenthesis);
         Function {
-            r#type,
+            ty,
             name,
             parameters,
             body: if self.accept_token(TokenKind::Semicolon).is_some() {
@@ -205,14 +205,29 @@ impl Parser<'_> {
 
     fn parse_declaration(&mut self) -> Declaration {
         assert!(self.try_token(TokenKind::Int));
-        let ans = Declaration {
-            r#type: self.parse_type(),
-            name: self.expect_token(TokenKind::Identifier).text,
-            default: if self.accept_token(TokenKind::Assign).is_some() {
-                Some(self.parse_expression())
-            } else {
-                None
-            },
+        let mut ty = self.parse_type();
+        let name = self.expect_token(TokenKind::Identifier).text;
+        let ans = if self.accept_token(TokenKind::Assign).is_some() {
+            Declaration {
+                ty,
+                name,
+                default: Some(self.parse_expression()),
+            }
+        } else {
+            while self.accept_token(TokenKind::LeftBracket).is_some() {
+                let index = self
+                    .expect_token(TokenKind::Integer)
+                    .text
+                    .parse::<i32>()
+                    .unwrap() as u32;
+                ty.bounds.push(index);
+                self.expect_token(TokenKind::RightBracket);
+            }
+            Declaration {
+                ty,
+                name,
+                default: None,
+            }
         };
         self.expect_token(TokenKind::Semicolon);
         ans
@@ -447,7 +462,15 @@ impl Parser<'_> {
                 ans
             }
         } else {
-            self.parse_postfix()
+            let mut ans = self.parse_postfix();
+            while self.accept_token(TokenKind::LeftBracket).is_some() {
+                ans = Expression {
+                    kind: ExpressionKind::Index(Box::new(ans), Box::new(self.parse_expression())),
+                    is_lvalue: true,
+                };
+                self.expect_token(TokenKind::RightBracket);
+            }
+            ans
         }
     }
 

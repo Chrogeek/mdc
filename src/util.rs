@@ -9,6 +9,8 @@ pub enum TokenKind {
     RightParenthesis,
     LeftBrace,
     RightBrace,
+    LeftBracket,
+    RightBracket,
     Semicolon,
     Not,
     LogicalNot,
@@ -51,35 +53,42 @@ pub struct Token {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Type {
-    pub level: i32, // Level of pointers (e.g. 3 for 'int ***')
+    pub level: u32, // Level of pointers (e.g. 3 for 'int ***')
+    pub bounds: Vec<u32>,
 }
 
 impl Type {
-    pub fn new(level: i32) -> Type {
-        Type { level }
+    pub fn new(level: u32) -> Type {
+        Type {
+            level,
+            bounds: Vec::new(),
+        }
     }
 
     pub fn make_value() -> Type {
-        Type { level: 0 }
+        Type::new(0)
     }
 
-    pub fn measure(&self) -> i32 {
-        assert!(self.level >= 0);
-        4
+    pub fn measure(&self) -> u32 {
+        self.bounds.iter().fold(4, |acc, cur| acc * cur)
     }
 
     pub fn is_pointer(&self) -> bool {
-        self.level > 0
+        self.level > 0 && self.bounds.is_empty()
     }
 
     pub fn is_value(&self) -> bool {
-        self.level == 0
+        self.level == 0 && self.bounds.is_empty()
+    }
+
+    pub fn is_array(&self) -> bool {
+        !self.bounds.is_empty()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Variable {
-    pub r#type: Type,
+    pub ty: Type,
     pub offset: i32,
 }
 
