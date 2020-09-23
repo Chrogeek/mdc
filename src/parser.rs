@@ -27,7 +27,7 @@ impl Parser<'_> {
                     kind: TokenKind::Asterisk,
                     text: "*".to_string(),
                 });
-                t.unwrap_pointer();
+                t = t.unwrap_pointer();
             }
             self.lexer.unget_token(Token {
                 kind: TokenKind::Int,
@@ -47,7 +47,7 @@ impl Parser<'_> {
         self.expect_token(TokenKind::Int);
         let mut ty = Type::make_primitive();
         while self.accept_token(TokenKind::Asterisk).is_some() {
-            ty.wrap_pointer();
+            ty = ty.wrap_pointer();
         }
         ty
     }
@@ -225,7 +225,7 @@ impl Parser<'_> {
                 self.expect_token(TokenKind::RightBracket);
             }
             for size in bounds.into_iter().rev() {
-                ty.wrap_array(size);
+                ty = ty.wrap_array(size);
             }
             Declaration {
                 ty,
@@ -252,12 +252,7 @@ impl Parser<'_> {
     fn parse_assignment(&mut self) -> Expression {
         let left = self.parse_ternary();
         if self.accept_token(TokenKind::Assign).is_some() {
-            assert!(left.is_lvalue);
-            let right = self.parse_expression();
-            Expression {
-                kind: ExpressionKind::Assignment(Box::new(left), Box::new(right)),
-                is_lvalue: false,
-            }
+            Expression::Assignment(Box::new(left), Box::new(self.parse_expression()))
         } else {
             left
         }
@@ -269,14 +264,11 @@ impl Parser<'_> {
             let true_part = self.parse_expression();
             self.expect_token(TokenKind::Colon);
             let false_part = self.parse_ternary();
-            Expression {
-                kind: ExpressionKind::Ternary(
-                    Box::new(condition),
-                    Box::new(true_part),
-                    Box::new(false_part),
-                ),
-                is_lvalue: false,
-            }
+            Expression::Ternary(
+                Box::new(condition),
+                Box::new(true_part),
+                Box::new(false_part),
+            )
         } else {
             condition
         }
@@ -286,13 +278,7 @@ impl Parser<'_> {
         let mut expr = self.parse_logical_and();
         loop {
             if self.accept_token(TokenKind::LogicalOr).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::LogicalOr(
-                        Box::new(expr),
-                        Box::new(self.parse_logical_and()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr = Expression::LogicalOr(Box::new(expr), Box::new(self.parse_logical_and()));
             } else {
                 break expr;
             }
@@ -303,13 +289,7 @@ impl Parser<'_> {
         let mut expr = self.parse_equality();
         loop {
             if self.accept_token(TokenKind::LogicalAnd).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::LogicalAnd(
-                        Box::new(expr),
-                        Box::new(self.parse_equality()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr = Expression::LogicalAnd(Box::new(expr), Box::new(self.parse_equality()));
             } else {
                 break expr;
             }
@@ -320,18 +300,9 @@ impl Parser<'_> {
         let mut expr = self.parse_relational();
         loop {
             if self.accept_token(TokenKind::Equal).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Equal(Box::new(expr), Box::new(self.parse_relational())),
-                    is_lvalue: false,
-                };
+                expr = Expression::Equal(Box::new(expr), Box::new(self.parse_relational()));
             } else if self.accept_token(TokenKind::Unequal).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Unequal(
-                        Box::new(expr),
-                        Box::new(self.parse_relational()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr = Expression::Unequal(Box::new(expr), Box::new(self.parse_relational()));
             } else {
                 break expr;
             }
@@ -342,31 +313,13 @@ impl Parser<'_> {
         let mut expr = self.parse_additive();
         loop {
             if self.accept_token(TokenKind::Less).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Less(Box::new(expr), Box::new(self.parse_additive())),
-                    is_lvalue: false,
-                };
+                expr = Expression::Less(Box::new(expr), Box::new(self.parse_additive()));
             } else if self.accept_token(TokenKind::LessEqual).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::LessEqual(
-                        Box::new(expr),
-                        Box::new(self.parse_additive()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr = Expression::LessEqual(Box::new(expr), Box::new(self.parse_additive()));
             } else if self.accept_token(TokenKind::Greater).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Greater(Box::new(expr), Box::new(self.parse_additive())),
-                    is_lvalue: false,
-                };
+                expr = Expression::Greater(Box::new(expr), Box::new(self.parse_additive()));
             } else if self.accept_token(TokenKind::GreaterEqual).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::GreaterEqual(
-                        Box::new(expr),
-                        Box::new(self.parse_additive()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr = Expression::GreaterEqual(Box::new(expr), Box::new(self.parse_additive()));
             } else {
                 break expr;
             }
@@ -377,21 +330,10 @@ impl Parser<'_> {
         let mut expr = self.parse_multiplicative();
         loop {
             if self.accept_token(TokenKind::Plus).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Addition(
-                        Box::new(expr),
-                        Box::new(self.parse_multiplicative()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr = Expression::Addition(Box::new(expr), Box::new(self.parse_multiplicative()));
             } else if self.accept_token(TokenKind::Hyphen).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Subtraction(
-                        Box::new(expr),
-                        Box::new(self.parse_multiplicative()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr =
+                    Expression::Subtraction(Box::new(expr), Box::new(self.parse_multiplicative()));
             } else {
                 break expr;
             }
@@ -402,23 +344,11 @@ impl Parser<'_> {
         let mut expr = self.parse_unary();
         loop {
             if self.accept_token(TokenKind::Asterisk).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Multiplication(
-                        Box::new(expr),
-                        Box::new(self.parse_unary()),
-                    ),
-                    is_lvalue: false,
-                };
+                expr = Expression::Multiplication(Box::new(expr), Box::new(self.parse_unary()));
             } else if self.accept_token(TokenKind::Slash).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Division(Box::new(expr), Box::new(self.parse_unary())),
-                    is_lvalue: false,
-                };
+                expr = Expression::Division(Box::new(expr), Box::new(self.parse_unary()));
             } else if self.accept_token(TokenKind::Percentage).is_some() {
-                expr = Expression {
-                    kind: ExpressionKind::Modulus(Box::new(expr), Box::new(self.parse_unary())),
-                    is_lvalue: false,
-                };
+                expr = Expression::Modulus(Box::new(expr), Box::new(self.parse_unary()));
             } else {
                 break expr;
             }
@@ -427,39 +357,21 @@ impl Parser<'_> {
 
     fn parse_unary(&mut self) -> Expression {
         if self.accept_token(TokenKind::Hyphen).is_some() {
-            Expression {
-                kind: ExpressionKind::Negation(Box::new(self.parse_unary())),
-                is_lvalue: false,
-            }
+            Expression::Negation(Box::new(self.parse_unary()))
         } else if self.accept_token(TokenKind::Not).is_some() {
-            Expression {
-                kind: ExpressionKind::Not(Box::new(self.parse_unary())),
-                is_lvalue: false,
-            }
+            Expression::Not(Box::new(self.parse_unary()))
         } else if self.accept_token(TokenKind::LogicalNot).is_some() {
-            Expression {
-                kind: ExpressionKind::LogicalNot(Box::new(self.parse_unary())),
-                is_lvalue: false,
-            }
+            Expression::LogicalNot(Box::new(self.parse_unary()))
         } else if self.accept_token(TokenKind::Asterisk).is_some() {
-            Expression {
-                kind: ExpressionKind::Dereference(Box::new(self.parse_unary())),
-                is_lvalue: true,
-            }
+            Expression::Dereference(Box::new(self.parse_unary()))
         } else if self.accept_token(TokenKind::Et).is_some() {
-            Expression {
-                kind: ExpressionKind::Reference(Box::new(self.parse_unary())),
-                is_lvalue: false,
-            }
+            Expression::Reference(Box::new(self.parse_unary()))
         } else if let Some(token) = self.accept_token(TokenKind::LeftParenthesis) {
             if self.try_token(TokenKind::Int) {
                 let target = self.parse_type();
                 self.expect_token(TokenKind::RightParenthesis);
                 let sub = self.parse_unary();
-                Expression {
-                    is_lvalue: sub.is_lvalue,
-                    kind: ExpressionKind::Convert(target, Box::new(sub)),
-                }
+                Expression::Convert(target, Box::new(sub))
             } else {
                 self.lexer.unget_token(token);
                 self.parse_postfix()
@@ -472,10 +384,7 @@ impl Parser<'_> {
     fn parse_postfix(&mut self) -> Expression {
         let base = if let Some(token) = self.accept_token(TokenKind::Identifier) {
             if self.accept_token(TokenKind::LeftParenthesis).is_some() {
-                let ans = Expression {
-                    kind: ExpressionKind::FunctionCall(token.text, self.parse_argument_list()),
-                    is_lvalue: false,
-                };
+                let ans = Expression::FunctionCall(token.text, self.parse_argument_list());
                 self.expect_token(TokenKind::RightParenthesis);
                 ans
             } else {
@@ -493,10 +402,7 @@ impl Parser<'_> {
         if indices.len() == 0 {
             base
         } else {
-            Expression {
-                kind: ExpressionKind::Index(Box::new(base), indices),
-                is_lvalue: true,
-            }
+            Expression::Index(Box::new(base), indices)
         }
     }
 
@@ -507,18 +413,12 @@ impl Parser<'_> {
             expression
         } else if let Some(name) = self.accept_token(TokenKind::Identifier) {
             let name = name.text;
-            Expression {
-                kind: ExpressionKind::Identifier(name),
-                is_lvalue: true,
-            }
+            Expression::Identifier(name)
         } else {
             let token = self.expect_token(TokenKind::Integer);
             let value = token.text;
             let value = value.parse().unwrap(); // Should not invoke any error
-            Expression {
-                kind: ExpressionKind::IntegerLiteral(value),
-                is_lvalue: false,
-            }
+            Expression::IntegerLiteral(value)
         }
     }
 

@@ -81,28 +81,42 @@ impl Type {
         !self.bounds.is_empty()
     }
 
-    pub fn unwrap_pointer(&mut self) -> &mut Type {
+    pub fn unwrap_pointer(&self) -> Type {
         assert!(self.is_pointer());
-        self.level -= 1;
-        self
+        Type {
+            level: self.level - 1,
+            bounds: self.bounds.clone(),
+        }
     }
 
-    pub fn unwrap_array(&mut self) -> &mut Type {
+    pub fn unwrap_array(&self) -> Type {
         assert!(self.is_array());
-        self.bounds.pop();
-        self
+        Type {
+            bounds: self.bounds[..self.bounds.len() - 1].to_vec(),
+            ..*self
+        }
     }
 
-    pub fn wrap_pointer(&mut self) -> &mut Type {
+    pub fn wrap_pointer(&self) -> Type {
         assert!(!self.is_array());
-        self.level += 1;
-        self
+        Type {
+            level: self.level + 1,
+            bounds: self.bounds.clone(),
+        }
     }
 
-    pub fn wrap_array(&mut self, bound: u32) -> &mut Type {
-        self.bounds.push(bound);
-        self
+    pub fn wrap_array(&self, bound: u32) -> Type {
+        Type {
+            bounds: [self.bounds.clone(), vec![bound]].join(&[][..]),
+            ..*self
+        }
     }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum Value {
+    Left,
+    Right,
 }
 
 #[derive(Clone)]
