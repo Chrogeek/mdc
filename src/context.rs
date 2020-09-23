@@ -265,14 +265,17 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
     }
 
     pub fn check_arguments(&self, name: &String, arguments: &Vec<Type>) {
+        let size = arguments.len();
+
         assert_eq!(
-            arguments.len(),
+            size,
             self.function_table.get(name).unwrap().parameters.len()
         );
-        for i in 0..arguments.len() {
+
+        for i in 0..size {
             assert_eq!(
                 self.function_table.get(name).unwrap().parameters[i],
-                arguments[i]
+                arguments[size - 1 - i]
             );
         }
     }

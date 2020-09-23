@@ -87,7 +87,6 @@ impl Function {
                 let mut offset = 0;
                 for (parameter_name, parameter_type) in self.parameters.iter() {
                     context.create_located(parameter_name, parameter_type, offset + 8);
-                    eprintln!("{}, {}", parameter_name, offset + 8);
                     offset += parameter_type.measure() as i32;
                 }
                 for item in body.iter() {
@@ -298,7 +297,7 @@ pub enum ExpressionKind {
     Reference(Box<Expression>),
     Dereference(Box<Expression>),
     Convert(Type, Box<Expression>),
-    Index(Box<Expression>, Box<Expression>),
+    Index(Box<Expression>, Vec<Expression>),
 }
 
 #[derive(Debug, Clone)]
@@ -323,6 +322,7 @@ impl Expression {
                 let lt = $lhs.emit(context);
                 let rt = $rhs.emit(context);
                 assert_eq!(lt, rt);
+                assert!(!lt.is_array());
                 context.$instruction();
                 Type::Primitive
             }};
@@ -335,8 +335,12 @@ impl Expression {
             }
             ExpressionKind::Identifier(name) => {
                 let rt = context.access_variable(name);
-                context.put_load();
-                rt
+                if rt.is_array() {
+                    rt
+                } else {
+                    context.put_load();
+                    rt
+                }
             }
             ExpressionKind::Negation(rhs) => {
                 assert!(rhs.emit(context).is_primitive());
@@ -380,7 +384,7 @@ impl Expression {
                     context.put_add_pointer_right();
                     lt
                 } else if lt.is_pointer() && rt.is_pointer() {
-                    assert!(lt == rt);
+                    assert_eq!(lt, rt);
                     context.put_subtract();
                     context.put_push(4);
                     context.put_divide();
@@ -457,12 +461,38 @@ impl Expression {
             ExpressionKind::Reference(rhs) => {
                 assert!(rhs.is_lvalue);
                 match &rhs.kind {
-                    ExpressionKind::Ternary(_, _, _) => Type::Pointer(Box::new(rhs.emit(context))),
                     ExpressionKind::Identifier(name) => {
-                        Type::Pointer(Box::new(context.access_variable(&name)))
+                        let ty = context.access_variable(&name);
+                        assert!(!ty.is_array());
+                        Type::Pointer(Box::new(ty))
                     }
                     ExpressionKind::Dereference(rrhs) => rrhs.emit(context),
-                    ExpressionKind::Index(_, _) => Type::Pointer(Box::new(rhs.emit(context))),
+                    ExpressionKind::Index(base, indices) => {
+                        let mut ty = base.emit(context);
+                        for i in 0..indices.len() {
+                            let index = &indices[i];
+                            if ty.is_array() {
+                                ty = ty.unwrap_array();
+                            } else if ty.is_pointer() {
+                                ty = ty.unwrap_pointer();
+                            } else {
+                                panic!();
+                            }
+                            assert!(index.emit(context).is_primitive());
+                            context.put_push(ty.measure() as i32);
+                            context.put_multiply();
+                            context.put_add();
+                            if !ty.is_array() && i + 1 < indices.len() {
+                                context.put_load();
+                            }
+                        }
+                        Type::Pointer(Box::new(ty))
+                    }
+                    ExpressionKind::Convert(target, rhs) => {
+                        assert!(!target.is_array());
+                        rhs.emit(context);
+                        Type::Pointer(Box::new(target.clone()))
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -473,31 +503,29 @@ impl Expression {
                 rt.unwrap_pointer()
             }
             ExpressionKind::Convert(target, rhs) => {
+                assert!(!target.is_array());
                 rhs.emit(context);
                 target.clone()
             }
-            ExpressionKind::Index(base, index) => {
-                let lt = if let ExpressionKind::Identifier(name) = &base.kind {
-                    context.access_variable(name)
-                } else {
-                    base.emit(context)
-                };
-                let rt = index.emit(context);
-                assert!(lt.is_pointer() || lt.is_array());
-                assert!(rt.is_primitive());
-                let mut ret = lt;
-                if ret.is_array() {
-                    ret = ret.unwrap_array();
-                    context.put_push(ret.measure() as i32);
+            ExpressionKind::Index(base, indices) => {
+                let mut ty = base.emit(context);
+                for index in indices.iter() {
+                    if ty.is_array() {
+                        ty = ty.unwrap_array();
+                    } else if ty.is_pointer() {
+                        ty = ty.unwrap_pointer();
+                    } else {
+                        panic!();
+                    }
+                    assert!(index.emit(context).is_primitive());
+                    context.put_push(ty.measure() as i32);
                     context.put_multiply();
                     context.put_add();
-                } else {
-                    ret = ret.unwrap_pointer();
-                    context.put_push(4);
-                    context.put_multiply();
-                    context.put_add();
+                    if !ty.is_array() {
+                        context.put_load();
+                    }
                 }
-                ret
+                ty
             }
         }
     }
