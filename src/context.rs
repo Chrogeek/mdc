@@ -46,8 +46,9 @@ impl Scope {
         );
     }
 
-    pub fn access_variable(&self, name: &String) -> Option<Variable> {
-        Some(self.variables.get(name)?.clone())
+    pub fn access_variable(&self, name: &String) -> Option<(Type, i32)> {
+        let var = self.variables.get(name)?;
+        Some((var.ty.clone(), var.offset))
     }
 
     // Creates a variable with specified memory offset, dedicated for arguments.
@@ -70,7 +71,6 @@ pub struct Loop {
     label_continue: String,
 }
 
-#[derive(PartialEq)]
 pub struct Primitive {
     return_type: Type,
     parameters: Vec<Type>,
@@ -178,9 +178,9 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
 
     pub fn access_variable(&mut self, name: &String) -> Type {
         for scope in self.scope_stack.iter().rev() {
-            if let Some(variable) = scope.access_variable(name) {
-                self.put_locate(variable.offset);
-                return variable.ty;
+            if let Some((ty, offset)) = scope.access_variable(name) {
+                self.put_locate(offset);
+                return ty;
             }
         }
         self.access_global_variable(name)

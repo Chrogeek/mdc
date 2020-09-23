@@ -440,7 +440,8 @@ impl Parser<'_> {
     // Like 'accept_token', but always puts the token back, whether succeeds or not
     fn try_token(&mut self, kind: Token) -> bool {
         let token = self.lexer.fetch_token();
-        self.lexer.unget_token(token.clone());
-        discriminant(&token) == discriminant(&kind)
+        let ans = discriminant(&token) == discriminant(&kind);
+        self.lexer.unget_token(token);
+        ans
     }
 }

@@ -66,10 +66,7 @@ impl<'a> Lexer<'a> {
         let mut offset = 0;
         while offset < self.source.len() {
             match self.source[offset] {
-                b' ' | b'\r' | b'\t' => {
-                    offset += 1;
-                }
-                b'\n' => {
+                b' ' | b'\r' | b'\t' | b'\n' => {
                     offset += 1;
                 }
                 _ => break,
@@ -81,44 +78,36 @@ impl<'a> Lexer<'a> {
             Token::Eof
         } else {
             match self.source[0] {
-                b'0'..=b'9' => loop {
-                    // Integer literals
-                    if offset >= self.source.len() {
-                        let (token, remaining) = self.source.split_at(offset);
-                        self.source = remaining;
-                        break Token::Integer(
-                            String::from_utf8_lossy(token).parse::<i32>().unwrap(),
-                        );
-                    }
-                    match self.source[offset] {
-                        b'0'..=b'9' => offset += 1,
-                        _ => {
-                            let (token, remaining) = self.source.split_at(offset);
-                            self.source = remaining;
-                            break Token::Integer(
-                                String::from_utf8_lossy(token).parse::<i32>().unwrap(),
-                            );
+                b'0'..=b'9' => {
+                    loop {
+                        // Integer literals
+                        if offset >= self.source.len() {
+                            break;
+                        }
+                        match self.source[offset] {
+                            b'0'..=b'9' => offset += 1,
+                            _ => break,
                         }
                     }
-                },
-                b'A'..=b'Z' | b'a'..=b'z' | b'_' => loop {
-                    // Identifiers & keywords
-                    if offset >= self.source.len() {
-                        let (_, remaining) = self.source.split_at(offset);
-                        self.source = remaining;
-                        break Lexer::recognize_keyword(self.source);
-                    }
-                    match self.source[offset] {
-                        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' => {
-                            offset += 1;
+                    let (token, remaining) = self.source.split_at(offset);
+                    self.source = remaining;
+                    Token::Integer(String::from_utf8_lossy(token).parse::<i32>().unwrap())
+                }
+                b'A'..=b'Z' | b'a'..=b'z' | b'_' => {
+                    loop {
+                        // Identifiers & keywords
+                        if offset >= self.source.len() {
+                            break;
                         }
-                        _ => {
-                            let (token, remaining) = self.source.split_at(offset);
-                            self.source = remaining;
-                            break Lexer::recognize_keyword(token);
+                        match self.source[offset] {
+                            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' => offset += 1,
+                            _ => break,
                         }
                     }
-                },
+                    let (token, remaining) = self.source.split_at(offset);
+                    self.source = remaining;
+                    Lexer::recognize_keyword(token)
+                }
                 b';' => make_single_symbol_match_arm!(Semicolon),
                 b'(' => make_single_symbol_match_arm!(LeftParenthesis),
                 b')' => make_single_symbol_match_arm!(RightParenthesis),

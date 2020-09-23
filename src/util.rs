@@ -1,4 +1,3 @@
-#[derive(PartialEq, Clone)]
 pub enum Token {
     // Special
     Integer(i32),
@@ -125,13 +124,8 @@ impl Type {
     }
 }
 
-#[derive(Clone, PartialEq)]
-pub enum Value {
-    Left,
-    Right,
-}
+pub type LeftValue = bool;
 
-#[derive(Clone)]
 pub struct Variable {
     pub ty: Type,
     pub offset: i32,

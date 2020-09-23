@@ -12,19 +12,19 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
+    pub fn emit(self, context: &mut Context<impl Write, impl Write, impl Write>) {
         let mut entry = false;
         context.put_directive(".text");
         context.put_directive(".globl main");
         context.write_data(".data");
         context.write_bss(".bss");
-        for item in self.items.iter() {
+        for item in self.items.into_iter() {
             match item {
                 ProgramItem::Function(function) => {
-                    function.emit(context);
                     if function.name == "main" {
                         entry = true;
                     }
+                    function.emit(context);
                 }
                 ProgramItem::Declaration(declaration) => {
                     context.create_global_variable(&declaration.name, &declaration.ty);
@@ -66,10 +66,9 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
-        self.body
-            .as_ref()
-            .and_then(|body| {
+    pub fn emit(self, context: &mut Context<impl Write, impl Write, impl Write>) {
+        match self.body {
+            Some(body) => {
                 context.define_function(
                     &self.name,
                     self.ty.clone(),
@@ -86,7 +85,7 @@ impl Function {
                     context.create_located(parameter_name, parameter_type, offset + 8);
                     offset += parameter_type.measure() as i32;
                 }
-                for item in body.iter() {
+                for item in body.into_iter() {
                     item.emit(context);
                 }
                 context.put_push(0);
@@ -94,9 +93,8 @@ impl Function {
                 context.leave_scope();
                 context.exit_function();
                 context.put_end_frame();
-                Some(())
-            })
-            .or_else(|| {
+            }
+            None => {
                 context.declare_function(
                     &self.name,
                     self.ty.clone(),
@@ -105,8 +103,8 @@ impl Function {
                         .map(|tuple| tuple.1.clone())
                         .collect(),
                 );
-                None
-            });
+            }
+        }
     }
 }
 
@@ -131,7 +129,7 @@ pub enum Statement {
 }
 
 impl Statement {
-    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
+    pub fn emit(self, context: &mut Context<impl Write, impl Write, impl Write>) {
         match self {
             Statement::Empty => {}
             Statement::Return(expression) => {
@@ -215,9 +213,9 @@ pub struct Compound {
 }
 
 impl Compound {
-    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
+    pub fn emit(self, context: &mut Context<impl Write, impl Write, impl Write>) {
         context.enter_scope();
-        for item in self.items.iter() {
+        for item in self.items.into_iter() {
             item.emit(context);
         }
         context.leave_scope();
@@ -231,12 +229,12 @@ pub struct Declaration {
 }
 
 impl Declaration {
-    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
+    pub fn emit(self, context: &mut Context<impl Write, impl Write, impl Write>) {
         context.create_variable(&self.name, &self.ty);
-        if let Some(expression) = &self.default {
+        if let Some(expression) = self.default {
             Expression::Assignment(
                 Box::new(Expression::Identifier(self.name.clone())),
-                Box::new(expression.clone()),
+                Box::new(expression),
             )
             .emit(context);
             context.put_pop();
@@ -250,7 +248,7 @@ pub enum BlockItem {
 }
 
 impl BlockItem {
-    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) {
+    pub fn emit(self, context: &mut Context<impl Write, impl Write, impl Write>) {
         match self {
             BlockItem::Statement(statement) => statement.emit(context),
             BlockItem::Declaration(declaration) => declaration.emit(context),
@@ -258,7 +256,6 @@ impl BlockItem {
     }
 }
 
-#[derive(Clone)]
 pub enum Expression {
     IntegerLiteral(i32),
     Identifier(String),
@@ -288,13 +285,16 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn emit(&self, context: &mut Context<impl Write, impl Write, impl Write>) -> (Type, Value) {
+    pub fn emit(
+        self,
+        context: &mut Context<impl Write, impl Write, impl Write>,
+    ) -> (Type, LeftValue) {
         macro_rules! make_binary_operator {
             ($lhs: ident, $rhs: ident, $instruction: ident) => {{
                 assert!($lhs.emit(context).0.is_primitive());
                 assert!($rhs.emit(context).0.is_primitive());
                 context.$instruction();
-                (Type::make_primitive(), Value::Right)
+                (Type::make_primitive(), false)
             }};
         }
 
@@ -304,17 +304,17 @@ impl Expression {
                 let rt = $rhs.emit(context).0;
                 assert!(lt == rt && !lt.is_array());
                 context.$instruction();
-                (Type::make_primitive(), Value::Right)
+                (Type::make_primitive(), false)
             }};
         }
 
-        match &self {
+        match self {
             Expression::IntegerLiteral(value) => {
-                context.put_push(*value);
-                (Type::make_primitive(), Value::Right)
+                context.put_push(value);
+                (Type::make_primitive(), false)
             }
             Expression::Identifier(name) => {
-                let rt = context.access_variable(name);
+                let rt = context.access_variable(&name);
                 (
                     if rt.is_array() {
                         rt
@@ -322,23 +322,23 @@ impl Expression {
                         context.put_load();
                         rt
                     },
-                    Value::Left,
+                    true,
                 )
             }
             Expression::Negation(rhs) => {
                 assert!(rhs.emit(context).0.is_primitive());
                 context.put_negate();
-                (Type::make_primitive(), Value::Right)
+                (Type::make_primitive(), false)
             }
             Expression::Not(rhs) => {
                 assert!(rhs.emit(context).0.is_primitive());
                 context.put_not();
-                (Type::make_primitive(), Value::Right)
+                (Type::make_primitive(), false)
             }
             Expression::LogicalNot(rhs) => {
                 assert!(rhs.emit(context).0.is_primitive());
                 context.put_logical_not();
-                (Type::make_primitive(), Value::Right)
+                (Type::make_primitive(), false)
             }
             Expression::Addition(lhs, rhs) => {
                 let lt = lhs.emit(context).0;
@@ -356,7 +356,7 @@ impl Expression {
                     } else {
                         panic!();
                     },
-                    Value::Right,
+                    false,
                 )
             }
             Expression::Subtraction(lhs, rhs) => {
@@ -379,7 +379,7 @@ impl Expression {
                     } else {
                         panic!();
                     },
-                    Value::Right,
+                    false,
                 )
             }
             Expression::Multiplication(lhs, rhs) => make_binary_operator!(lhs, rhs, put_multiply),
@@ -397,10 +397,10 @@ impl Expression {
             Expression::LogicalOr(lhs, rhs) => make_binary_operator!(lhs, rhs, put_logical_or),
             Expression::Assignment(lhs, rhs) => {
                 let rt = rhs.emit(context).0;
-                let lt = Expression::Reference((*lhs).clone()).emit(context).0;
+                let lt = Expression::Reference(lhs).emit(context).0;
                 assert!(rt == lt.unwrap_pointer());
                 context.put_store();
-                (rt, Value::Right)
+                (rt, false)
             }
             Expression::Ternary(condition, true_part, false_part) => {
                 let label_1 = context.next_label();
@@ -417,24 +417,25 @@ impl Expression {
                 assert!(lt == rt);
                 context.leave_scope();
                 context.put_label(label_2);
-                (lt, Value::Right)
+                (lt, false)
             }
             Expression::FunctionCall(name, arguments) => {
                 let mut types = Vec::new();
-                for argument in arguments.iter().rev() {
+                let arg_count = arguments.len();
+                for argument in arguments.into_iter().rev() {
                     types.push(argument.emit(context).0);
                 }
-                context.check_arguments(name, &types);
-                context.put_call(name);
-                context.mark_function_called(name);
-                for _ in arguments.iter() {
+                context.check_arguments(&name, &types);
+                context.put_call(&name);
+                context.mark_function_called(&name);
+                for _ in 0..arg_count {
                     context.put_pop();
                 }
                 context.put_returned_value();
-                (context.get_function_return_type(name), Value::Right)
+                (context.get_function_return_type(&name), false)
             }
             Expression::Reference(rhs) => (
-                match &**rhs {
+                match *rhs {
                     Expression::Identifier(name) => {
                         let ty = context.access_variable(&name);
                         assert!(!ty.is_array());
@@ -443,8 +444,9 @@ impl Expression {
                     Expression::Dereference(rrhs) => rrhs.emit(context).0,
                     Expression::Index(base, indices) => {
                         let mut ty = base.emit(context).0;
-                        for i in 0..indices.len() {
-                            let index = &indices[i];
+                        let indices_count = indices.len();
+                        let mut i = 0;
+                        for index in indices.into_iter() {
                             if ty.is_array() {
                                 ty = ty.unwrap_array();
                             } else if ty.is_pointer() {
@@ -456,9 +458,10 @@ impl Expression {
                             context.put_push(ty.measure() as i32);
                             context.put_multiply();
                             context.put_add();
-                            if !ty.is_array() && i + 1 < indices.len() {
+                            if !ty.is_array() && i + 1 < indices_count {
                                 context.put_load();
                             }
+                            i += 1;
                         }
                         ty.wrap_pointer().clone()
                     }
@@ -469,13 +472,13 @@ impl Expression {
                     }
                     _ => unreachable!(),
                 },
-                Value::Right,
+                false,
             ),
             Expression::Dereference(rhs) => {
                 let rt = rhs.emit(context).0;
                 assert!(rt.is_pointer());
                 context.put_load();
-                (rt.unwrap_pointer().clone(), Value::Left)
+                (rt.unwrap_pointer().clone(), true)
             }
             Expression::Convert(target, rhs) => {
                 assert!(!target.is_array());
@@ -484,7 +487,7 @@ impl Expression {
             }
             Expression::Index(base, indices) => {
                 let mut ty = base.emit(context).0;
-                for index in indices.iter() {
+                for index in indices.into_iter() {
                     if ty.is_array() {
                         ty = ty.unwrap_array();
                     } else if ty.is_pointer() {
@@ -500,7 +503,7 @@ impl Expression {
                         context.put_load();
                     }
                 }
-                (ty, Value::Left)
+                (ty, true)
             }
         }
     }
