@@ -407,7 +407,7 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
 
     pub fn put_set_frame(&mut self, name: String) {
         self.offset = 0;
-        self.current_function = Some(name.clone());
+        self.current_function = Some(name);
         assembly!(
             self,
             "addi sp, sp, -4",

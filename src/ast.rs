@@ -71,18 +71,15 @@ impl Function {
             Some(body) => {
                 context.define_function(
                     &self.name,
-                    self.ty.clone(),
-                    self.parameters
-                        .iter()
-                        .map(|tuple| tuple.1.clone())
-                        .collect(),
+                    self.ty,
+                    self.parameters.iter().map(|t| t.1.clone()).collect(),
                 );
                 context.enter_function(&self.name);
-                context.put_set_frame(self.name.clone());
+                context.put_set_frame(self.name);
                 context.enter_scope();
                 let mut offset = 0;
-                for (parameter_name, parameter_type) in self.parameters.iter() {
-                    context.create_located(parameter_name, parameter_type, offset + 8);
+                for (parameter_name, parameter_type) in self.parameters.into_iter() {
+                    context.create_located(&parameter_name, &parameter_type, offset + 8);
                     offset += parameter_type.measure() as i32;
                 }
                 for item in body.into_iter() {
@@ -97,11 +94,8 @@ impl Function {
             None => {
                 context.declare_function(
                     &self.name,
-                    self.ty.clone(),
-                    self.parameters
-                        .iter()
-                        .map(|tuple| tuple.1.clone())
-                        .collect(),
+                    self.ty,
+                    self.parameters.into_iter().map(|tuple| tuple.1).collect(),
                 );
             }
         }
@@ -233,7 +227,7 @@ impl Declaration {
         context.create_variable(&self.name, &self.ty);
         if let Some(expression) = self.default {
             Expression::Assignment(
-                Box::new(Expression::Identifier(self.name.clone())),
+                Box::new(Expression::Identifier(self.name)),
                 Box::new(expression),
             )
             .emit(context);
@@ -470,7 +464,7 @@ impl Expression {
             Expression::Convert(target, rhs) => {
                 assert!(!target.is_array());
                 let (_, vt) = rhs.emit(context);
-                (target.clone(), vt)
+                (target, vt)
             }
             Expression::Index(base, indices) => {
                 let mut ty = base.emit(context).0;
