@@ -289,6 +289,14 @@ impl Expression {
         self,
         context: &mut Context<impl Write, impl Write, impl Write>,
     ) -> (Type, LeftValue) {
+        macro_rules! make_unary_emitter {
+            ($rhs: ident, $next: ident) => {{
+                assert!($rhs.emit(context).0.is_primitive());
+                context.$next();
+                (Type::make_primitive(), false)
+            }};
+        }
+
         macro_rules! make_binary_operator {
             ($lhs: ident, $rhs: ident, $instruction: ident) => {{
                 assert!($lhs.emit(context).0.is_primitive());
@@ -315,72 +323,51 @@ impl Expression {
             }
             Expression::Identifier(name) => {
                 let rt = context.access_variable(&name);
-                (
-                    if rt.is_array() {
-                        rt
-                    } else {
-                        context.put_load();
-                        rt
-                    },
-                    true,
-                )
+                if !rt.is_array() {
+                    context.put_load();
+                }
+                (rt, true)
             }
-            Expression::Negation(rhs) => {
-                assert!(rhs.emit(context).0.is_primitive());
-                context.put_negate();
-                (Type::make_primitive(), false)
-            }
-            Expression::Not(rhs) => {
-                assert!(rhs.emit(context).0.is_primitive());
-                context.put_not();
-                (Type::make_primitive(), false)
-            }
-            Expression::LogicalNot(rhs) => {
-                assert!(rhs.emit(context).0.is_primitive());
-                context.put_logical_not();
-                (Type::make_primitive(), false)
-            }
+            Expression::Negation(rhs) => make_unary_emitter!(rhs, put_negate),
+            Expression::Not(rhs) => make_unary_emitter!(rhs, put_not),
+            Expression::LogicalNot(rhs) => make_unary_emitter!(rhs, put_logical_not),
             Expression::Addition(lhs, rhs) => {
                 let lt = lhs.emit(context).0;
                 let rt = rhs.emit(context).0;
-                (
-                    if lt.is_primitive() && rt.is_primitive() {
-                        context.put_add();
-                        Type::make_primitive()
-                    } else if lt.is_primitive() && rt.is_pointer() {
-                        context.put_add_pointer_left();
-                        rt
-                    } else if lt.is_pointer() && rt.is_primitive() {
-                        context.put_add_pointer_right();
-                        lt
-                    } else {
-                        panic!();
-                    },
-                    false,
-                )
+                let ret = if lt.is_primitive() && rt.is_primitive() {
+                    context.put_add();
+                    Type::make_primitive()
+                } else if lt.is_primitive() && rt.is_pointer() {
+                    context.put_add_pointer_left();
+                    rt
+                } else if lt.is_pointer() && rt.is_primitive() {
+                    context.put_add_pointer_right();
+                    lt
+                } else {
+                    panic!();
+                };
+                (ret, false)
             }
             Expression::Subtraction(lhs, rhs) => {
                 let lt = lhs.emit(context).0;
                 let rt = rhs.emit(context).0;
-                (
-                    if lt.is_primitive() && rt.is_primitive() {
-                        context.put_subtract();
-                        Type::make_primitive()
-                    } else if lt.is_pointer() && rt.is_primitive() {
-                        context.put_negate();
-                        context.put_add_pointer_right();
-                        lt
-                    } else if lt.is_pointer() && rt.is_pointer() {
-                        assert!(lt == rt);
-                        context.put_subtract();
-                        context.put_push(4);
-                        context.put_divide();
-                        Type::make_primitive()
-                    } else {
-                        panic!();
-                    },
-                    false,
-                )
+                let ret = if lt.is_primitive() && rt.is_primitive() {
+                    context.put_subtract();
+                    Type::make_primitive()
+                } else if lt.is_pointer() && rt.is_primitive() {
+                    context.put_negate();
+                    context.put_add_pointer_right();
+                    lt
+                } else if lt.is_pointer() && rt.is_pointer() {
+                    assert!(lt == rt);
+                    context.put_subtract();
+                    context.put_push(4);
+                    context.put_divide();
+                    Type::make_primitive()
+                } else {
+                    panic!();
+                };
+                (ret, false)
             }
             Expression::Multiplication(lhs, rhs) => make_binary_operator!(lhs, rhs, put_multiply),
             Expression::Division(lhs, rhs) => make_binary_operator!(lhs, rhs, put_divide),
@@ -463,12 +450,12 @@ impl Expression {
                             }
                             i += 1;
                         }
-                        ty.wrap_pointer().clone()
+                        ty.wrap_pointer()
                     }
                     Expression::Convert(target, rhs) => {
                         assert!(!target.is_array());
                         rhs.emit(context);
-                        target.clone().wrap_pointer().clone()
+                        target.wrap_pointer()
                     }
                     _ => unreachable!(),
                 },
@@ -478,7 +465,7 @@ impl Expression {
                 let rt = rhs.emit(context).0;
                 assert!(rt.is_pointer());
                 context.put_load();
-                (rt.unwrap_pointer().clone(), true)
+                (rt.unwrap_pointer(), true)
             }
             Expression::Convert(target, rhs) => {
                 assert!(!target.is_array());
