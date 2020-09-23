@@ -52,59 +52,56 @@ pub struct Token {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum Type {
-    Primitive,
-    Pointer(Box<Type>),
-    Array(Box<Type>, u32),
+pub struct Type {
+    level: u32,
+    bounds: Vec<u32>,
 }
 
 impl Type {
-    pub fn measure(&self) -> u32 {
-        match self {
-            Type::Primitive => 4,
-            Type::Pointer(_) => 4,
-            Type::Array(ty, size) => ty.measure() * size,
+    pub fn make_primitive() -> Type {
+        Type {
+            level: 0,
+            bounds: Vec::new(),
         }
+    }
+
+    pub fn measure(&self) -> u32 {
+        self.bounds.iter().fold(4, |acc, cur| acc * cur)
     }
 
     pub fn is_primitive(&self) -> bool {
-        if let Type::Primitive = self {
-            true
-        } else {
-            false
-        }
+        self.level == 0 && self.bounds.is_empty()
     }
 
     pub fn is_pointer(&self) -> bool {
-        if let Type::Pointer(_) = self {
-            true
-        } else {
-            false
-        }
+        self.level > 0 && self.bounds.is_empty()
     }
 
     pub fn is_array(&self) -> bool {
-        if let Type::Array(_, _) = self {
-            true
-        } else {
-            false
-        }
+        !self.bounds.is_empty()
     }
 
-    pub fn unwrap_pointer(self) -> Type {
-        if let Type::Pointer(ty) = self {
-            *ty
-        } else {
-            panic!();
-        }
+    pub fn unwrap_pointer(&mut self) -> &mut Type {
+        assert!(self.is_pointer());
+        self.level -= 1;
+        self
     }
 
-    pub fn unwrap_array(self) -> Type {
-        if let Type::Array(ty, _) = self {
-            *ty
-        } else {
-            panic!();
-        }
+    pub fn unwrap_array(&mut self) -> &mut Type {
+        assert!(self.is_array());
+        self.bounds.pop();
+        self
+    }
+
+    pub fn wrap_pointer(&mut self) -> &mut Type {
+        assert!(!self.is_array());
+        self.level += 1;
+        self
+    }
+
+    pub fn wrap_array(&mut self, bound: u32) -> &mut Type {
+        self.bounds.push(bound);
+        self
     }
 }
 

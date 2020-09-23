@@ -22,12 +22,12 @@ impl Parser<'_> {
             let next_parenthesis = self.try_token(TokenKind::LeftParenthesis);
 
             self.lexer.unget_token(token);
-            while let Type::Pointer(ty) = t {
+            while t.is_pointer() {
                 self.lexer.unget_token(Token {
                     kind: TokenKind::Asterisk,
                     text: "*".to_string(),
                 });
-                t = *ty;
+                t.unwrap_pointer();
             }
             self.lexer.unget_token(Token {
                 kind: TokenKind::Int,
@@ -45,9 +45,9 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) -> Type {
         self.expect_token(TokenKind::Int);
-        let mut ty = Type::Primitive;
+        let mut ty = Type::make_primitive();
         while self.accept_token(TokenKind::Asterisk).is_some() {
-            ty = Type::Pointer(Box::new(ty));
+            ty.wrap_pointer();
         }
         ty
     }
@@ -225,7 +225,7 @@ impl Parser<'_> {
                 self.expect_token(TokenKind::RightBracket);
             }
             for size in bounds.into_iter().rev() {
-                ty = Type::Array(Box::new(ty), size);
+                ty.wrap_array(size);
             }
             Declaration {
                 ty,
