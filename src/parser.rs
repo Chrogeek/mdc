@@ -537,7 +537,7 @@ impl Parser<'_> {
     // Expects the next token to be with the specified kind, panics if fails.
     fn expect_token(&mut self, kind: TokenKind) -> Token {
         let token = self.lexer.fetch_token();
-        assert_eq!(token.kind, kind);
+        assert!(token.kind == kind);
         token
     }
 

@@ -2,13 +2,11 @@ use crate::context::*;
 use crate::util::*;
 use std::io::Write;
 
-#[derive(Debug)]
 pub enum ProgramItem {
     Function(Function),
     Declaration(Declaration),
 }
 
-#[derive(Debug)]
 pub struct Program {
     pub items: Vec<ProgramItem>,
 }
@@ -60,7 +58,6 @@ impl Program {
     }
 }
 
-#[derive(Debug)]
 pub struct Function {
     pub ty: Type,
     pub name: String,
@@ -113,7 +110,6 @@ impl Function {
     }
 }
 
-#[derive(Debug)]
 pub enum Statement {
     Empty,
     Return(Expression),
@@ -214,7 +210,6 @@ impl Statement {
     }
 }
 
-#[derive(Debug)]
 pub struct Compound {
     pub items: Vec<BlockItem>,
 }
@@ -229,7 +224,6 @@ impl Compound {
     }
 }
 
-#[derive(Debug)]
 pub struct Declaration {
     pub ty: Type,
     pub name: String,
@@ -256,7 +250,6 @@ impl Declaration {
     }
 }
 
-#[derive(Debug)]
 pub enum BlockItem {
     Statement(Statement),
     Declaration(Declaration),
@@ -271,7 +264,7 @@ impl BlockItem {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ExpressionKind {
     IntegerLiteral(i32),
     Identifier(String),
@@ -300,7 +293,7 @@ pub enum ExpressionKind {
     Index(Box<Expression>, Vec<Expression>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Expression {
     pub kind: ExpressionKind,
     pub is_lvalue: bool,
@@ -321,8 +314,7 @@ impl Expression {
             ($lhs: ident, $rhs: ident, $instruction: ident) => {{
                 let lt = $lhs.emit(context);
                 let rt = $rhs.emit(context);
-                assert_eq!(lt, rt);
-                assert!(!lt.is_array());
+                assert!(lt == rt && !lt.is_array());
                 context.$instruction();
                 Type::Primitive
             }};
@@ -384,7 +376,7 @@ impl Expression {
                     context.put_add_pointer_right();
                     lt
                 } else if lt.is_pointer() && rt.is_pointer() {
-                    assert_eq!(lt, rt);
+                    assert!(lt == rt);
                     context.put_subtract();
                     context.put_push(4);
                     context.put_divide();
@@ -415,9 +407,8 @@ impl Expression {
             ExpressionKind::Assignment(lhs, rhs) => {
                 assert!(lhs.is_lvalue);
                 let t = rhs.emit(context);
-                assert_eq!(
-                    t,
-                    Expression {
+                assert!(
+                    t == Expression {
                         kind: ExpressionKind::Reference((*lhs).clone()),
                         is_lvalue: false,
                     }

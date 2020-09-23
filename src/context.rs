@@ -273,17 +273,15 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         );
 
         for i in 0..size {
-            assert_eq!(
-                self.function_table.get(name).unwrap().parameters[i],
-                arguments[size - 1 - i]
+            assert!(
+                self.function_table.get(name).unwrap().parameters[i] == arguments[size - 1 - i]
             );
         }
     }
 
     pub fn check_return_type(&self, return_type: Type) {
-        assert_eq!(
-            return_type,
-            self.get_function_return_type(self.current_function.as_ref().unwrap())
+        assert!(
+            return_type == self.get_function_return_type(self.current_function.as_ref().unwrap())
         );
     }
 

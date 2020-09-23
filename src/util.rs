@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum TokenKind {
     // Special
     Integer,
@@ -45,13 +45,13 @@ pub enum TokenKind {
     Continue,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub text: String, // token from the source code (as string)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Type {
     Primitive,
     Pointer(Box<Type>),
@@ -108,7 +108,7 @@ impl Type {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Variable {
     pub ty: Type,
     pub offset: i32,
