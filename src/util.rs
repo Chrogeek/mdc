@@ -1,8 +1,8 @@
 #[derive(PartialEq, Clone)]
-pub enum TokenKind {
+pub enum Token {
     // Special
-    Integer,
-    Identifier,
+    Integer(i32),
+    Identifier(String),
     Eof,
     // Symbols
     LeftParenthesis,
@@ -45,10 +45,22 @@ pub enum TokenKind {
     Continue,
 }
 
-#[derive(Clone)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub text: String, // token from the source code (as string)
+impl Token {
+    pub fn unwrap_integer(&self) -> i32 {
+        if let Token::Integer(value) = self {
+            *value
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn unwrap_identifier(&self) -> String {
+        if let Token::Identifier(text) = self {
+            text.clone()
+        } else {
+            panic!();
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]

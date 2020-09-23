@@ -13,18 +13,18 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn recognize_keyword<'b>(input: &'b [u8]) -> TokenKind {
+    fn recognize_keyword<'b>(input: &'b [u8]) -> Token {
         match input {
-            b"int" => TokenKind::Int,
-            b"return" => TokenKind::Return,
-            b"if" => TokenKind::If,
-            b"else" => TokenKind::Else,
-            b"for" => TokenKind::For,
-            b"do" => TokenKind::Do,
-            b"while" => TokenKind::While,
-            b"break" => TokenKind::Break,
-            b"continue" => TokenKind::Continue,
-            _ => TokenKind::Identifier,
+            b"int" => Token::Int,
+            b"return" => Token::Return,
+            b"if" => Token::If,
+            b"else" => Token::Else,
+            b"for" => Token::For,
+            b"do" => Token::Do,
+            b"while" => Token::While,
+            b"break" => Token::Break,
+            b"continue" => Token::Continue,
+            _ => Token::Identifier(String::from_utf8_lossy(input).to_string()),
         }
     }
 
@@ -43,31 +43,22 @@ impl<'a> Lexer<'a> {
     fn get_token(&mut self) -> Token {
         macro_rules! make_single_symbol_match_arm {
             ($target: ident) => {{
-                let (token, remaining) = self.source.split_at(1);
+                let (_, remaining) = self.source.split_at(1);
                 self.source = remaining;
-                Token {
-                    kind: TokenKind::$target,
-                    text: String::from_utf8_lossy(token).to_string(),
-                }
+                Token::$target
             }};
         }
 
         macro_rules! make_double_symbol_match_arm {
             ($second: expr, $target1: ident, $target2: ident) => {{
                 if self.source.len() < 2 || self.source[1] != $second {
-                    let (token, remaining) = self.source.split_at(1);
+                    let (_, remaining) = self.source.split_at(1);
                     self.source = remaining;
-                    Token {
-                        kind: TokenKind::$target1,
-                        text: String::from_utf8_lossy(token).to_string(),
-                    }
+                    Token::$target1
                 } else {
-                    let (token, remaining) = self.source.split_at(2);
+                    let (_, remaining) = self.source.split_at(2);
                     self.source = remaining;
-                    Token {
-                        kind: TokenKind::$target2,
-                        text: String::from_utf8_lossy(token).to_string(),
-                    }
+                    Token::$target2
                 }
             }};
         }
@@ -87,11 +78,7 @@ impl<'a> Lexer<'a> {
         self.source = &self.source[offset..];
         let mut offset = 0;
         if self.source.len() == 0 {
-            // EOF
-            Token {
-                kind: TokenKind::Eof,
-                text: "".to_string(),
-            }
+            Token::Eof
         } else {
             match self.source[0] {
                 b'0'..=b'9' => loop {
@@ -99,32 +86,27 @@ impl<'a> Lexer<'a> {
                     if offset >= self.source.len() {
                         let (token, remaining) = self.source.split_at(offset);
                         self.source = remaining;
-                        break Token {
-                            kind: TokenKind::Integer,
-                            text: String::from_utf8_lossy(token).to_string(),
-                        };
+                        break Token::Integer(
+                            String::from_utf8_lossy(token).parse::<i32>().unwrap(),
+                        );
                     }
                     match self.source[offset] {
                         b'0'..=b'9' => offset += 1,
                         _ => {
                             let (token, remaining) = self.source.split_at(offset);
                             self.source = remaining;
-                            break Token {
-                                kind: TokenKind::Integer,
-                                text: String::from_utf8_lossy(token).to_string(),
-                            };
+                            break Token::Integer(
+                                String::from_utf8_lossy(token).parse::<i32>().unwrap(),
+                            );
                         }
                     }
                 },
                 b'A'..=b'Z' | b'a'..=b'z' | b'_' => loop {
                     // Identifiers & keywords
                     if offset >= self.source.len() {
-                        let (token, remaining) = self.source.split_at(offset);
+                        let (_, remaining) = self.source.split_at(offset);
                         self.source = remaining;
-                        break Token {
-                            kind: Self::recognize_keyword(self.source),
-                            text: String::from_utf8_lossy(token).to_string(),
-                        };
+                        break Lexer::recognize_keyword(self.source);
                     }
                     match self.source[offset] {
                         b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' => {
@@ -133,10 +115,7 @@ impl<'a> Lexer<'a> {
                         _ => {
                             let (token, remaining) = self.source.split_at(offset);
                             self.source = remaining;
-                            break Token {
-                                kind: Self::recognize_keyword(token),
-                                text: String::from_utf8_lossy(token).to_string(),
-                            };
+                            break Lexer::recognize_keyword(token);
                         }
                     }
                 },
