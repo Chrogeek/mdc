@@ -126,11 +126,6 @@ impl Type {
 
 pub type LeftValue = bool;
 
-pub struct Variable {
-    pub ty: Type,
-    pub offset: i32,
-}
-
 pub fn mangle_function_name(name: &String) -> String {
     "__".to_string() + name
 }

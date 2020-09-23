@@ -3,26 +3,26 @@ use std::collections::HashMap;
 use std::io::Write;
 
 macro_rules! assembly {
-    ($this: expr, $($instruction: expr),*) => {{
-            $(
-                writeln!($this.text_output, "{}", $instruction.to_string()).unwrap();
-            )*
+    ($this: ident, $($instruction: expr),*) => {{
+        $(
+            writeln!($this.text_output, "{}", $instruction.to_string()).unwrap();
+        )*
+    }};
+}
+
+macro_rules! binary_operator_assembly {
+    ($this: ident, $function_name: ident, $($instruction: expr),*) => {
+        pub fn $function_name(&mut $this) {
+            $this.offset += 4;
+            assembly!($this, "lw t1, 4(sp)", "lw t2, 0(sp)", $($instruction,)* "addi sp, sp, 4", "sw t1, 0(sp)");
         }
     };
 }
 
-macro_rules! binary_operator_assembly {
-    ($this: expr, $($instruction: expr),*) => {
-        assembly!($this,
-            "lw t1, 4(sp)", "lw t2, 0(sp)", $($instruction,)* "addi sp, sp, 4", "sw t1, 0(sp)"
-        )
-    };
-}
-
 pub struct Scope {
-    start: i32,                           // staring memory location of this scope
-    offset: i32,                          // current memory location of this scope
-    variables: HashMap<String, Variable>, // map from variable name to memory location
+    start: i32,                              // staring memory location of this scope
+    offset: i32,                             // current memory location of this scope
+    variables: HashMap<String, (Type, i32)>, // map from variable name to memory location
 }
 
 impl Scope {
@@ -37,18 +37,13 @@ impl Scope {
     pub fn create_variable(&mut self, name: &String, ty: &Type) {
         assert!(!self.variables.contains_key(name));
         self.offset -= ty.measure() as i32;
-        self.variables.insert(
-            name.clone(),
-            Variable {
-                ty: ty.clone(),
-                offset: self.offset,
-            },
-        );
+        self.variables
+            .insert(name.clone(), (ty.clone(), self.offset));
     }
 
     pub fn access_variable(&self, name: &String) -> Option<(Type, i32)> {
         let var = self.variables.get(name)?;
-        Some((var.ty.clone(), var.offset))
+        Some((var.0.clone(), var.1))
     }
 
     // Creates a variable with specified memory offset, dedicated for arguments.
@@ -56,13 +51,7 @@ impl Scope {
     pub fn create_located(&mut self, name: &String, ty: &Type, offset: i32) {
         assert!(offset >= self.start);
         assert!(!self.variables.contains_key(name));
-        self.variables.insert(
-            name.clone(),
-            Variable {
-                ty: ty.clone(),
-                offset,
-            },
-        );
+        self.variables.insert(name.clone(), (ty.clone(), offset));
     }
 }
 
@@ -287,7 +276,7 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
 
     pub fn next_label(&mut self) -> String {
         self.label_count += 1;
-        "_label_".to_string() + &self.label_count.to_string()
+        "_l_".to_string() + &self.label_count.to_string()
     }
 
     pub fn put_directive(&mut self, directive: &str) {
@@ -339,10 +328,7 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         assembly!(self, "lw t1, 0(sp)", "seqz t1, t1", "sw t1, 0(sp)");
     }
 
-    pub fn put_add(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "add t1, t1, t2");
-    }
+    binary_operator_assembly!(self, put_add, "add t1, t1, t2");
 
     pub fn put_add_pointer_left(&mut self) {
         self.offset += 4;
@@ -370,65 +356,24 @@ impl<T: Write, U: Write, V: Write> Context<T, U, V> {
         );
     }
 
-    pub fn put_subtract(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "sub t1, t1, t2");
-    }
-
-    pub fn put_multiply(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "mul t1, t1, t2");
-    }
-
-    pub fn put_divide(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "div t1, t1, t2");
-    }
-
-    pub fn put_modulo(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "rem t1, t1, t2");
-    }
-
-    pub fn put_equal(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "sub t1, t1, t2", "seqz t1, t1");
-    }
-
-    pub fn put_unequal(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "sub t1, t1, t2", "snez t1, t1");
-    }
-
-    pub fn put_less(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "slt t1, t1, t2");
-    }
-
-    pub fn put_less_equal(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "slt t1, t2, t1", "seqz t1, t1");
-    }
-
-    pub fn put_greater(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "slt t1, t2, t1");
-    }
-
-    pub fn put_greater_equal(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "slt t1, t1, t2", "seqz t1, t1");
-    }
-
-    pub fn put_logical_and(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "snez t1, t1", "snez t2, t2", "and t1, t1, t2");
-    }
-
-    pub fn put_logical_or(&mut self) {
-        self.offset += 4;
-        binary_operator_assembly!(self, "or t1, t1, t2", "snez t1, t1");
-    }
+    binary_operator_assembly!(self, put_subtract, "sub t1, t1, t2");
+    binary_operator_assembly!(self, put_multiply, "mul t1, t1, t2");
+    binary_operator_assembly!(self, put_divide, "div t1, t1, t2");
+    binary_operator_assembly!(self, put_modulo, "rem t1, t1, t2");
+    binary_operator_assembly!(self, put_equal, "sub t1, t1, t2", "seqz t1, t1");
+    binary_operator_assembly!(self, put_unequal, "sub t1, t1, t2", "snez t1, t1");
+    binary_operator_assembly!(self, put_less, "slt t1, t1, t2");
+    binary_operator_assembly!(self, put_less_equal, "slt t1, t2, t1", "seqz t1, t1");
+    binary_operator_assembly!(self, put_greater, "slt t1, t2, t1");
+    binary_operator_assembly!(self, put_greater_equal, "slt t1, t1, t2", "seqz t1, t1");
+    binary_operator_assembly!(
+        self,
+        put_logical_and,
+        "snez t1, t1",
+        "snez t2, t2",
+        "and t1, t1, t2"
+    );
+    binary_operator_assembly!(self, put_logical_or, "or t1, t1, t2", "snez t1, t1");
 
     pub fn put_load(&mut self) {
         assembly!(self, "lw t1, 0(sp)", "lw t1, 0(t1)", "sw t1, 0(sp)");

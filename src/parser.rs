@@ -132,16 +132,14 @@ impl Parser<'_> {
             self.expect_token(Token::LeftParenthesis);
             let condition = self.parse_expression();
             self.expect_token(Token::RightParenthesis);
-            let true_branch = Box::new(self.parse_statement());
-            let false_branch = if self.accept_token(Token::Else).is_some() {
-                Some(Box::new(self.parse_statement()))
-            } else {
-                None
-            };
             Statement::If {
                 condition,
-                true_branch,
-                false_branch,
+                true_branch: Box::new(self.parse_statement()),
+                false_branch: if self.accept_token(Token::Else).is_some() {
+                    Some(Box::new(self.parse_statement()))
+                } else {
+                    None
+                },
             }
         } else if self.try_token(Token::LeftBrace) {
             Statement::Compound(self.parse_compound())
@@ -258,10 +256,6 @@ impl Parser<'_> {
     }
 
     fn parse_expression(&mut self) -> Expression {
-        self.parse_assignment()
-    }
-
-    fn parse_assignment(&mut self) -> Expression {
         let left = self.parse_ternary();
         if self.accept_token(Token::Assign).is_some() {
             Expression::Assignment(Box::new(left), Box::new(self.parse_expression()))
