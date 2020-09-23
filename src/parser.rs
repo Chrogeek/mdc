@@ -3,6 +3,21 @@ use crate::lexer::*;
 use crate::util::*;
 use std::mem::*;
 
+macro_rules! make_binary_operator_parser {
+    ($this: ident, $function_name: ident, [$($token: ident => $expr: ident),*], $next: ident) => {
+        fn $function_name(&mut $this) -> Expression {
+            let mut expr = $this.$next();
+            loop {
+                $(if $this.accept_token(Token::$token).is_some() {
+                    expr = Expression::$expr(Box::new(expr), Box::new($this.$next()));
+                } else)* {
+                    break expr;
+                }
+            }
+        }
+    };
+}
+
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
 }
@@ -271,110 +286,36 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_logical_or(&mut self) -> Expression {
-        let mut expr = self.parse_logical_and();
-        loop {
-            if self.accept_token(Token::LogicalOr).is_some() {
-                expr = Expression::LogicalOr(Box::new(expr), Box::new(self.parse_logical_and()));
-            } else {
-                break expr;
-            }
-        }
-    }
-
-    fn parse_logical_and(&mut self) -> Expression {
-        let mut expr = self.parse_equality();
-        loop {
-            if self.accept_token(Token::LogicalAnd).is_some() {
-                expr = Expression::LogicalAnd(Box::new(expr), Box::new(self.parse_equality()));
-            } else {
-                break expr;
-            }
-        }
-    }
-
-    fn parse_equality(&mut self) -> Expression {
-        let mut expr = self.parse_relational();
-        loop {
-            if self.accept_token(Token::Equal).is_some() {
-                expr = Expression::Equal(Box::new(expr), Box::new(self.parse_relational()));
-            } else if self.accept_token(Token::Unequal).is_some() {
-                expr = Expression::Unequal(Box::new(expr), Box::new(self.parse_relational()));
-            } else {
-                break expr;
-            }
-        }
-    }
-
-    fn parse_relational(&mut self) -> Expression {
-        let mut expr = self.parse_additive();
-        loop {
-            if self.accept_token(Token::Less).is_some() {
-                expr = Expression::Less(Box::new(expr), Box::new(self.parse_additive()));
-            } else if self.accept_token(Token::LessEqual).is_some() {
-                expr = Expression::LessEqual(Box::new(expr), Box::new(self.parse_additive()));
-            } else if self.accept_token(Token::Greater).is_some() {
-                expr = Expression::Greater(Box::new(expr), Box::new(self.parse_additive()));
-            } else if self.accept_token(Token::GreaterEqual).is_some() {
-                expr = Expression::GreaterEqual(Box::new(expr), Box::new(self.parse_additive()));
-            } else {
-                break expr;
-            }
-        }
-    }
-
-    fn parse_additive(&mut self) -> Expression {
-        let mut expr = self.parse_multiplicative();
-        loop {
-            if self.accept_token(Token::Plus).is_some() {
-                expr = Expression::Addition(Box::new(expr), Box::new(self.parse_multiplicative()));
-            } else if self.accept_token(Token::Hyphen).is_some() {
-                expr =
-                    Expression::Subtraction(Box::new(expr), Box::new(self.parse_multiplicative()));
-            } else {
-                break expr;
-            }
-        }
-    }
-
-    fn parse_multiplicative(&mut self) -> Expression {
-        let mut expr = self.parse_unary();
-        loop {
-            if self.accept_token(Token::Asterisk).is_some() {
-                expr = Expression::Multiplication(Box::new(expr), Box::new(self.parse_unary()));
-            } else if self.accept_token(Token::Slash).is_some() {
-                expr = Expression::Division(Box::new(expr), Box::new(self.parse_unary()));
-            } else if self.accept_token(Token::Percentage).is_some() {
-                expr = Expression::Modulus(Box::new(expr), Box::new(self.parse_unary()));
-            } else {
-                break expr;
-            }
-        }
-    }
+    make_binary_operator_parser!(self, parse_logical_or, [LogicalOr => LogicalOr], parse_logical_and);
+    make_binary_operator_parser!(self, parse_logical_and, [LogicalAnd => LogicalAnd], parse_equality);
+    make_binary_operator_parser!(self, parse_equality, [Equal => Equal, Unequal => Unequal], parse_relational);
+    make_binary_operator_parser!(self, parse_relational, [Less => Less, LessEqual => LessEqual, Greater => Greater, GreaterEqual => GreaterEqual], parse_additive);
+    make_binary_operator_parser!(self, parse_additive, [Plus => Addition, Hyphen => Subtraction], parse_multiplicative);
+    make_binary_operator_parser!(self, parse_multiplicative, [Asterisk => Multiplication, Slash => Division, Percentage => Modulus], parse_unary);
 
     fn parse_unary(&mut self) -> Expression {
-        if self.accept_token(Token::Hyphen).is_some() {
-            Expression::Negation(Box::new(self.parse_unary()))
-        } else if self.accept_token(Token::Not).is_some() {
-            Expression::Not(Box::new(self.parse_unary()))
-        } else if self.accept_token(Token::LogicalNot).is_some() {
-            Expression::LogicalNot(Box::new(self.parse_unary()))
-        } else if self.accept_token(Token::Asterisk).is_some() {
-            Expression::Dereference(Box::new(self.parse_unary()))
-        } else if self.accept_token(Token::Et).is_some() {
-            Expression::Reference(Box::new(self.parse_unary()))
-        } else if let Some(token) = self.accept_token(Token::LeftParenthesis) {
-            if self.try_token(Token::Int) {
-                let target = self.parse_type();
-                self.expect_token(Token::RightParenthesis);
-                let sub = self.parse_unary();
-                Expression::Convert(target, Box::new(sub))
-            } else {
-                self.lexer.unget_token(token);
+        let next = self.lexer.fetch_token();
+        match next {
+            Token::Hyphen => Expression::Negation(Box::new(self.parse_unary())),
+            Token::Not => Expression::Not(Box::new(self.parse_unary())),
+            Token::LogicalNot => Expression::LogicalNot(Box::new(self.parse_unary())),
+            Token::Asterisk => Expression::Dereference(Box::new(self.parse_unary())),
+            Token::Et => Expression::Reference(Box::new(self.parse_unary())),
+            Token::LeftParenthesis => {
+                if self.try_token(Token::Int) {
+                    let target = self.parse_type();
+                    self.expect_token(Token::RightParenthesis);
+                    let sub = self.parse_unary();
+                    Expression::Convert(target, Box::new(sub))
+                } else {
+                    self.lexer.unget_token(Token::LeftParenthesis);
+                    self.parse_postfix()
+                }
+            }
+            _ => {
+                self.lexer.unget_token(next);
                 self.parse_postfix()
             }
-        } else {
-            self.parse_postfix()
         }
     }
 
