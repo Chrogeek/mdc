@@ -144,15 +144,11 @@ impl Statement {
                 let label_2 = context.next_label();
                 assert!(condition.emit(context).0.is_primitive());
                 context.put_jump_zero(label_1.clone());
-                context.enter_scope();
                 true_branch.emit(context);
-                context.leave_scope();
                 context.put_jump(label_2.clone());
                 context.put_label(label_1);
                 if let Some(false_part) = false_branch {
-                    context.enter_scope();
                     false_part.emit(context);
-                    context.leave_scope();
                 }
                 context.put_label(label_2);
             }
@@ -179,14 +175,12 @@ impl Statement {
                     assert!(expression.emit(context).0.is_primitive());
                     context.put_jump_zero(label_break.clone());
                 }
-                context.enter_scope();
                 body.emit(context);
                 context.put_label(label_continue);
                 if let Some(expression) = modifier {
                     expression.emit(context);
                     context.put_pop();
                 }
-                context.leave_scope();
                 context.put_jump(label_restart);
                 context.put_label(label_break);
                 context.leave_scope();
@@ -388,15 +382,11 @@ impl Expression {
                 let label_2 = context.next_label();
                 assert!(condition.emit(context).0.is_primitive());
                 context.put_jump_zero(label_1.clone());
-                context.enter_scope();
                 let lt = true_part.emit(context).0;
-                context.leave_scope();
                 context.put_jump(label_2.clone());
                 context.put_label(label_1);
-                context.enter_scope();
                 let rt = false_part.emit(context).0;
                 assert!(lt == rt);
-                context.leave_scope();
                 context.put_label(label_2);
                 (lt, false)
             }
