@@ -5,12 +5,12 @@ THU 2020 fall Compiler Principles (30240382) long assignment: a Mini-Decaf compi
 * No third-party tools
 * Two-pass compilation
 
-# Build & Run
+## Build & Run
 
 Compile with Rust stable.
 
 Run with 1 command-line argument specifying input source file name, and the compiled RISC-V assembly will be output to stdout.
 
-# License
+## License
 
 All rights reserved (for this repo).
